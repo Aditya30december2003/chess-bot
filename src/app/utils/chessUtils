@@ -1,0 +1,40 @@
+// utils/chessUtils.js
+export const getCustomSquareStyles = (selectedSquare, validMoves) => {
+  const styles = {};
+  
+  if (selectedSquare) {
+    styles[selectedSquare] = {
+      background: 'radial-gradient(circle, rgba(255,255,0,0.4) 0%, transparent 70%)',
+      boxShadow: 'inset 0 0 20px rgba(255,255,0,0.6)'
+    };
+  }
+  
+  validMoves.forEach(square => {
+    styles[square] = {
+      background: 'radial-gradient(circle, rgba(0,255,0,0.3) 0%, transparent 70%)',
+      position: 'relative'
+    };
+  });
+  
+  return styles;
+};
+
+export const isDraggablePiece = ({ piece }, gameOver, isVsBot, botThinking, playerColor, game) => {
+  if (gameOver) return false;
+  if (isVsBot) {
+    if (botThinking) return false;
+    const isPlayerTurn = (playerColor === 'white' && game.turn() === 'w') || 
+                       (playerColor === 'black' && game.turn() === 'b');
+    return isPlayerTurn && piece[0] === game.turn();
+  }
+  return piece[0] === game.turn();
+};
+
+export const canPlayerMove = (isVsBot, playerColor, game, botThinking) => {
+  if (!isVsBot) return true;
+  if (botThinking) return false;
+  
+  const isPlayerTurn = (playerColor === 'white' && game.turn() === 'w') || 
+                      (playerColor === 'black' && game.turn() === 'b');
+  return isPlayerTurn;
+};

@@ -1,59 +1,280 @@
-import { useRef, useState, useEffect } from 'react';
+// // ===============================================
+// // ChessGame.js - FINAL FIXED VERSION
+// // ===============================================
+
+// import React, { useEffect, useState } from 'react';
+// import { Chessboard } from 'react-chessboard';
+// import { Chess } from 'chess.js';
+
+// // Import components and hooks
+// import { GameModeSelector } from '../components/gameModeSelector';
+// import { GameStatus } from '../components/gameStatus';
+// import { CustomPiece } from '../components/customPiece';
+// import { GameControls } from '../components/GameControls';
+// import { GameInstructions } from '../components/gameInstructions';
+// import { useSoundManager } from '../components/soundManager';
+// import { useChessGame } from '../hooks/useChessGame';
+// import { useBotGame } from '../hooks/useBotGame';
+// import { 
+//   getCustomSquareStyles, 
+//   isDraggablePiece, 
+//   canPlayerMove 
+// } from '../utils/chessUtils';
+
+// export default function ChessGame() {
+//   const [boardWidth, setBoardWidth] = useState(400);
+
+//   // Custom hooks
+//   const {
+//     game,
+//     fen,
+//     selectedSquare,
+//     validMoves,
+//     gameOver,
+//     winner,
+//     setSelectedSquare,
+//     setValidMoves,
+//     resetGame,
+//     makeMove,
+//     selectPiece,
+//     updateGame,
+//   } = useChessGame();
+
+//   const {
+//     moveTree,
+//     isVsBot,
+//     playerColor,
+//     isLoading,
+//     botThinking,
+//     setBotThinking,
+//     setIsVsBot,
+//     makeBotMove,
+//     startVsBotGame,
+//     startPvPGame
+//   } = useBotGame();
+
+//   const { playMoveSound, SoundElements } = useSoundManager();
+
+//   // Responsive board sizing
+//   useEffect(() => {
+//     function handleResize() {
+//       const maxWidth = window.innerWidth - 40;
+//       const maxHeight = window.innerHeight - 200;
+//       const newWidth = Math.min(maxWidth, maxHeight, 600);
+//       setBoardWidth(newWidth);
+//     }
+
+//     window.addEventListener('resize', handleResize);
+//     handleResize();
+//     return () => window.removeEventListener('resize', handleResize);
+//   }, []);
+
+//   // FIXED: Bot move trigger logic - SIMPLIFIED
+//   useEffect(() => {
+//     if (isVsBot && !gameOver && moveTree && !botThinking) {
+//       const currentTurn = game.turn(); // 'w' for white, 'b' for black
+      
+//       // Simple logic: if it's not the player's turn, it's the bot's turn
+//       const isPlayerTurn = (playerColor === 'white' && currentTurn === 'w') || 
+//                           (playerColor === 'black' && currentTurn === 'b');
+//       const isBotTurn = !isPlayerTurn;
+      
+//       console.log('🔍 Bot Turn Check:', {
+//         playerColor,
+//         currentTurn: currentTurn === 'w' ? 'white' : 'black',
+//         isPlayerTurn,
+//         isBotTurn,
+//         gameOver,
+//         botThinking,
+//         moveTreeLoaded: !!moveTree
+//       });
+      
+//       if (isBotTurn) {
+//         console.log('🤖 Triggering bot move...');
+//         makeBotMove(game, updateGame, playMoveSound);
+//       }
+//     }
+//   }, [fen, isVsBot, playerColor, moveTree, gameOver, botThinking, game, updateGame, playMoveSound, makeBotMove]);
+
+//   function onSquareClick(square) {
+//     if (gameOver) return;
+    
+//     if (!canPlayerMove(isVsBot, playerColor, game, botThinking)) return;
+
+//     const piece = game.get(square);
+    
+//     if (selectedSquare) {
+//       if (selectedSquare === square) {
+//         setSelectedSquare(null);
+//         setValidMoves([]);
+//         return;
+//       }
+      
+//       const move = makeMove(selectedSquare, square);
+//       if (move) {
+//         setSelectedSquare(null);
+//         setValidMoves([]);
+//         playMoveSound(move, game);
+//       } else if (piece && piece.color === game.turn()) {
+//         selectPiece(square);
+//       } else {
+//         setSelectedSquare(null);
+//         setValidMoves([]);
+//       }
+//     } else {
+//       if (piece && piece.color === game.turn()) {
+//         selectPiece(square);
+//       }
+//     }
+//   }
+
+//   function onPieceDrop(sourceSquare, targetSquare, piece) {
+//     if (gameOver) return false;
+    
+//     if (!canPlayerMove(isVsBot, playerColor, game, botThinking)) return false;
+
+//     const move = makeMove(sourceSquare, targetSquare);
+//     setSelectedSquare(null);
+//     setValidMoves([]);
+    
+//     if (move) {
+//       playMoveSound(move, game);
+//       return true;
+//     }
+//     return false;
+//   }
+
+//   // Create custom pieces object
+//   const customPieces = {};
+//   ['wP', 'wN', 'wB', 'wR', 'wQ', 'wK', 'bP', 'bN', 'bB', 'bR', 'bQ', 'bK'].forEach(piece => {
+//     customPieces[piece] = ({ squareWidth }) => <CustomPiece piece={piece} squareWidth={squareWidth} />;
+//   });
+
+//   const boardOrientation = isVsBot ? playerColor : 'white';
+
+//   return (
+//     <div className="min-h-screen p-4 flex flex-col items-center" style={{
+//       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+//     }}>
+//       <div className="w-full max-w-2xl">
+//         {/* Game Mode Selection */}
+//         {!isVsBot && (
+//           <GameModeSelector 
+//             onStartVsBot={(color) => startVsBotGame(color, resetGame)}
+//             onStartPvP={() => startPvPGame(resetGame)}
+//             isLoading={isLoading}
+//           />
+//         )}
+
+//         {/* Game Status */}
+//         <GameStatus 
+//           gameOver={gameOver}
+//           winner={winner}
+//           game={game}
+//           isVsBot={isVsBot}
+//           botThinking={botThinking}
+//           playerColor={playerColor}
+//         />
+
+//         {/* Chess Board */}
+//         <div className="bg-white/10 backdrop-blur-md rounded-xl p-2 mb-2 border border-white/20 shadow-2xl">
+//           <Chessboard
+//             position={fen}
+//             onPieceDrop={onPieceDrop}
+//             onSquareClick={onSquareClick}
+//             boardWidth={boardWidth}
+//             boardOrientation={boardOrientation}
+//             customDarkSquareStyle={{ 
+//               background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+//               boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.2)'
+//             }}
+//             customLightSquareStyle={{ 
+//               background: 'linear-gradient(135deg, #c4b5fd 0%, #a78bfa 100%)',
+//               boxShadow: 'inset 0 2px 4px rgba(255,255,255,0.2)'
+//             }}
+//             customBoardStyle={{
+//               borderRadius: '0.5rem',
+//               overflow: 'hidden',
+//               boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)'
+//             }}
+//             customSquareStyles={getCustomSquareStyles(selectedSquare, validMoves)}
+//             customPieces={customPieces}
+//             areArrowsAllowed={true}
+//             arePremovesAllowed={false}
+//             isDraggablePiece={(pieceInfo) => 
+//               isDraggablePiece(pieceInfo, gameOver, isVsBot, botThinking, playerColor, game)
+//             }
+//           />
+//         </div>
+
+//         {/* Game Controls */}
+//         <GameControls 
+//           onResetGame={resetGame}
+//           isVsBot={isVsBot}
+//           onBackToModeSelection={() => setIsVsBot(false)}
+//         />
+
+//         {/* Game Instructions */}
+//         <GameInstructions />
+
+//         {/* Sound Elements */}
+//         <SoundElements />
+//       </div>
+//     </div>
+//   );
+// }
+
+import React, { useEffect, useState, useCallback } from 'react';
 import { Chessboard } from 'react-chessboard';
 import { Chess } from 'chess.js';
 
-// Simulated AdiBot function (replace with your actual implementation)
-function getAdiBotMove(fen, moveTree) {
-  const game = new Chess(fen);
-  const moves = game.history();
-
-  let node = moveTree;
-
-  for (const move of moves) {
-    if (!node[move]) {
-      return null;
-    }
-    node = node[move];
-  }
-
-  const nextMoves = Object.entries(node)
-    .filter(([key]) => key !== '__games')
-    .map(([move, data]) => ({
-      move,
-      count: data.__games || 0,
-    }));
-
-  if (nextMoves.length === 0) return null;
-
-  nextMoves.sort((a, b) => b.count - a.count);
-  return nextMoves[0].move;
-}
+// Import components and hooks
+import { BotSelector, BotProfile } from '../components/BotSelector';
+import { GameStatus } from '../components/gameStatus';
+import { CustomPiece } from '../components/customPiece';
+import { GameControls } from '../components/GameControls';
+import { GameInstructions } from '../components/gameInstructions';
+import { useSoundManager } from '../components/soundManager';
+import { useChessGame } from '../hooks/useChessGame';
+import { useHybridBot } from '../hooks/useHybridBot';
+import { 
+  getCustomSquareStyles, 
+  isDraggablePiece, 
+  canPlayerMove 
+} from '../utils/chessUtils';
 
 export default function ChessGame() {
-  const [game, setGame] = useState(new Chess());
-  const [fen, setFen] = useState(game.fen());
   const [boardWidth, setBoardWidth] = useState(400);
-  const [selectedSquare, setSelectedSquare] = useState(null);
-  const [validMoves, setValidMoves] = useState([]);
-  const [gameOver, setGameOver] = useState(false);
-  const [winner, setWinner] = useState(null);
-  const [moveTree, setMoveTree] = useState(null);
-  const [isVsBot, setIsVsBot] = useState(false);
+  const [gameMode, setGameMode] = useState('selection'); // 'selection', 'bot', 'pvp'
   const [playerColor, setPlayerColor] = useState('white');
-  const [isLoading, setIsLoading] = useState(false);
-  const [botThinking, setBotThinking] = useState(false);
+  const [isVsBot, setIsVsBot] = useState(false);
+  const [botMoveInProgress, setBotMoveInProgress] = useState(false);
 
-  // Sound refs
-  const moveSound = useRef(null);
-  const captureSound = useRef(null);
-  const castleSound = useRef(null);
-  const moveCheckSound = useRef(null);
-  const promoteSound = useRef(null);
+  // Custom hooks
+  const {
+    game,
+    fen,
+    selectedSquare,
+    validMoves,
+    gameOver,
+    winner,
+    setSelectedSquare,
+    setValidMoves,
+    resetGame,
+    makeMove,
+    selectPiece,
+    updateGame,
+  } = useChessGame();
 
-  // Fetch move tree when component mounts
-  useEffect(() => {
-    fetchMoveTree();
-  }, []);
+  const {
+    currentBot,
+    isLoading,
+    botThinking,
+    getBotMove,
+    createBotFromPlayer
+  } = useHybridBot();
+
+  const { playMoveSound, SoundElements } = useSoundManager();
 
   // Responsive board sizing
   useEffect(() => {
@@ -69,117 +290,126 @@ export default function ChessGame() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Check for game over conditions
-  useEffect(() => {
-    if (game.isGameOver()) {
-      setGameOver(true);
-      if (game.isCheckmate()) {
-        setWinner(game.turn() === 'w' ? 'Black' : 'White');
-      } else {
-        setWinner('Draw');
-      }
+  // Memoized bot move function to prevent infinite re-renders
+  const makeBotMoveAsync = useCallback(async () => {
+    if (botMoveInProgress || !currentBot || gameOver) {
+      return;
     }
-  }, [fen, game]);
 
-  // Bot move logic
-  useEffect(() => {
-    if (isVsBot && !gameOver && moveTree) {
-      const isPlayerTurn = (playerColor === 'white' && game.turn() === 'w') || 
-                          (playerColor === 'black' && game.turn() === 'b');
-      
-      if (!isPlayerTurn) {
-        makeBotMove();
-      }
-    }
-  }, [fen, isVsBot, playerColor, moveTree, gameOver]);
-
-  async function fetchMoveTree() {
-    setIsLoading(true);
-    try {
-      const response = await fetch('/api/move-tree');
-      if (response.ok) {
-        const data = await response.json();
-        setMoveTree(data);
-      } else {
-        console.error('Failed to fetch move tree');
-        // Fallback to demo data
-        setMoveTree({
-          "e4": { "__games": 15, "e5": { "__games": 8, "Nf3": { "__games": 5 } } },
-          "d4": { "__games": 10, "d5": { "__games": 6 } },
-          "Nf3": { "__games": 5 }
-        });
-      }
-    } catch (error) {
-      console.error('Error fetching move tree:', error);
-      // Fallback to demo data
-      setMoveTree({
-        "e4": { "__games": 15, "e5": { "__games": 8, "Nf3": { "__games": 5 } } },
-        "d4": { "__games": 10, "d5": { "__games": 6 } },
-        "Nf3": { "__games": 5 }
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function makeBotMove() {
-    if (!moveTree) return;
-    
-    setBotThinking(true);
-    
-    // Add delay to make it feel more natural
-    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1500));
+    console.log('🤖 Starting bot move process...');
+    setBotMoveInProgress(true);
     
     try {
-      const botMove = getAdiBotMove(fen, moveTree);
+      const gameHistory = game.history();
+      console.log(`📜 Game history length: ${gameHistory.length}`);
       
-      if (botMove) {
-        const newGame = new Chess(fen);
-        const move = newGame.move(botMove);
-        
-        if (move) {
-          setGame(newGame);
-          setFen(newGame.fen());
-          playMoveSound(move);
-        } else {
-          // If AdiBot move fails, make a random valid move
-          makeRandomMove();
-        }
+      const botMove = await getBotMove(game, gameHistory);
+      
+      if (!botMove) {
+        console.warn('❌ Bot returned no move');
+        setBotMoveInProgress(false);
+        return;
+      }
+      
+      console.log(`🎯 Bot (${currentBot.displayName}) attempting move: ${botMove}`);
+      
+      // Verify the move is legal before applying
+      const testGame = new Chess(game.fen());
+      const legalMoves = testGame.moves();
+      
+      if (!legalMoves.includes(botMove)) {
+        console.warn(`❌ Bot move ${botMove} is not legal. Legal moves: ${legalMoves.slice(0, 5).join(', ')}`);
+        setBotMoveInProgress(false);
+        return;
+      }
+      
+      // Execute the move
+      const moveResult = testGame.move(botMove);
+      
+      if (moveResult) {
+        console.log(`✅ Bot move successful: ${moveResult.san}`);
+        updateGame(testGame);
+        playMoveSound(moveResult, testGame);
       } else {
-        // No move found in tree, make random move
-        makeRandomMove();
+        console.warn(`❌ Failed to execute bot move: ${botMove}`);
       }
-    } catch (error) {
-      console.error('Bot move error:', error);
-      makeRandomMove();
-    } finally {
-      setBotThinking(false);
-    }
-  }
-
-  function makeRandomMove() {
-    const moves = game.moves();
-    if (moves.length > 0) {
-      const randomMove = moves[Math.floor(Math.random() * moves.length)];
-      const newGame = new Chess(fen);
-      const move = newGame.move(randomMove);
       
-      if (move) {
-        setGame(newGame);
-        setFen(newGame.fen());
-        playMoveSound(move);
-      }
+    } catch (error) {
+      console.error('❌ Error in bot move process:', error);
+    } finally {
+      setBotMoveInProgress(false);
     }
-  }
+  }, [currentBot, game, gameOver, getBotMove, updateGame, playMoveSound, botMoveInProgress]);
 
+  // Improved bot turn detection with better logging
+  useEffect(() => {
+    if (gameMode !== 'bot' || !currentBot || gameOver || botThinking || botMoveInProgress) {
+      return;
+    }
+
+    const currentTurn = game.turn(); // 'w' for white, 'b' for black
+    const isPlayerTurn = (playerColor === 'white' && currentTurn === 'w') || 
+                        (playerColor === 'black' && currentTurn === 'b');
+    const isBotTurn = !isPlayerTurn;
+    
+    console.log('🔍 Turn Analysis:', {
+      gameMode,
+      playerColor,
+      currentTurn: currentTurn === 'w' ? 'white' : 'black',
+      isPlayerTurn,
+      isBotTurn,
+      gameOver,
+      botThinking,
+      botMoveInProgress,
+      botLoaded: !!currentBot,
+      fen: game.fen()
+    });
+    
+    if (isBotTurn) {
+      console.log('🚀 Bot turn detected - triggering move');
+      // Add a small delay to ensure UI updates properly
+      setTimeout(() => {
+        makeBotMoveAsync();
+      }, 100);
+    } else {
+      console.log('👤 Player turn - waiting for player move');
+    }
+  }, [fen, gameMode, currentBot, playerColor, gameOver, botThinking, botMoveInProgress, makeBotMoveAsync, game]);
+
+  // Handle bot creation and game start
+  const handleBotCreated = (bot, color) => {
+    console.log(`🚀 Starting game against ${bot.displayName} - Player: ${color}`);
+    setPlayerColor(color);
+    setIsVsBot(true);
+    setGameMode('bot');
+    setBotMoveInProgress(false); // Reset bot move state
+    resetGame();
+  };
+
+  // Handle PvP game start
+  const handleStartPvP = () => {
+    console.log('🚀 Starting PvP game');
+    setIsVsBot(false);
+    setGameMode('pvp');
+    setBotMoveInProgress(false);
+    resetGame();
+  };
+
+  // Handle back to selection
+  const handleBackToSelection = () => {
+    setGameMode('selection');
+    setIsVsBot(false);
+    setBotMoveInProgress(false);
+    resetGame();
+  };
+
+  // Chess move handlers
   function onSquareClick(square) {
     if (gameOver) return;
     
-    // Prevent moves when it's bot's turn
-    if (isVsBot) {
-      const isPlayerTurn = (playerColor === 'white' && game.turn() === 'w') || 
-                          (playerColor === 'black' && game.turn() === 'b');
-      if (!isPlayerTurn || botThinking) return;
+    if (!canPlayerMove(isVsBot, playerColor, game, botThinking || botMoveInProgress)) {
+      console.log('🚫 Cannot move - not player turn or bot is thinking');
+      return;
     }
 
     const piece = game.get(square);
@@ -191,10 +421,12 @@ export default function ChessGame() {
         return;
       }
       
-      const moveAttempted = makeMove(selectedSquare, square);
-      if (moveAttempted) {
+      const move = makeMove(selectedSquare, square);
+      if (move) {
         setSelectedSquare(null);
         setValidMoves([]);
+        playMoveSound(move, game);
+        console.log(`✅ Player move: ${move.san}`);
       } else if (piece && piece.color === game.turn()) {
         selectPiece(square);
       } else {
@@ -208,154 +440,32 @@ export default function ChessGame() {
     }
   }
 
-  function selectPiece(square) {
-    setSelectedSquare(square);
-    const moves = game.moves({ square, verbose: true });
-    setValidMoves(moves.map(move => move.to));
-  }
-
-  function makeMove(sourceSquare, targetSquare) {
-    try {
-      const piece = game.get(sourceSquare);
-      
-      if (!piece || piece.color !== game.turn()) {
-        return false;
-      }
-
-      const isPromotion = piece.type === 'p' && 
-        (targetSquare[1] === '8' || targetSquare[1] === '1');
-
-      const move = game.move({
-        from: sourceSquare,
-        to: targetSquare,
-        promotion: isPromotion ? 'q' : undefined,
-      });
-
-      if (move === null) return false;
-
-      playMoveSound(move);
-      setFen(game.fen());
-      return true;
-    } catch (e) {
-      console.error('Move error:', e);
-      return false;
-    }
-  }
-
   function onPieceDrop(sourceSquare, targetSquare, piece) {
     if (gameOver) return false;
     
-    // Prevent moves when it's bot's turn
-    if (isVsBot) {
-      const isPlayerTurn = (playerColor === 'white' && game.turn() === 'w') || 
-                          (playerColor === 'black' && game.turn() === 'b');
-      if (!isPlayerTurn || botThinking) return false;
+    if (!canPlayerMove(isVsBot, playerColor, game, botThinking || botMoveInProgress)) {
+      console.log('🚫 Cannot drop piece - not player turn or bot is thinking');
+      return false;
     }
 
-    const moveResult = makeMove(sourceSquare, targetSquare);
+    const move = makeMove(sourceSquare, targetSquare);
     setSelectedSquare(null);
     setValidMoves([]);
-    return moveResult;
-  }
-
-  function playMoveSound(move) {
-    if (!move) return;
-
-    try {
-      const sound = 
-        move.flags.includes('c') ? captureSound :
-        (move.flags.includes('k') || move.flags.includes('q')) ? castleSound :
-        move.flags.includes('p') ? promoteSound :
-        game.isCheck() ? moveCheckSound :
-        moveSound;
-
-      if (sound.current) {
-        sound.current.currentTime = 0;
-        sound.current.play().catch(() => {});
-      }
-    } catch (e) {
-      console.error('Sound error:', e);
+    
+    if (move) {
+      playMoveSound(move, game);
+      console.log(`✅ Player drag move: ${move.san}`);
+      return true;
     }
+    return false;
   }
 
-  function resetGame() {
-    const newGame = new Chess();
-    setGame(newGame);
-    setFen(newGame.fen());
-    setSelectedSquare(null);
-    setValidMoves([]);
-    setGameOver(false);
-    setWinner(null);
-    setBotThinking(false);
-  }
+  // Create custom pieces object
+  const customPieces = {};
+  ['wP', 'wN', 'wB', 'wR', 'wQ', 'wK', 'bP', 'bN', 'bB', 'bR', 'bQ', 'bK'].forEach(piece => {
+    customPieces[piece] = ({ squareWidth }) => <CustomPiece piece={piece} squareWidth={squareWidth} />;
+  });
 
-  function startVsBotGame(color) {
-    resetGame();
-    setIsVsBot(true);
-    setPlayerColor(color);
-    
-    // If player chose black, bot (white) should move first
-    if (color === 'black') {
-      setTimeout(() => makeBotMove(), 1000);
-    }
-  }
-
-  function startPvPGame() {
-    resetGame();
-    setIsVsBot(false);
-  }
-
-  // Custom pieces with black/white styling
-  function CustomPiece({ piece, squareWidth }) {
-    const pieceSymbols = {
-      wP: '♙', wN: '♘', wB: '♗', wR: '♖', wQ: '♕', wK: '♔',
-      bP: '♙', bN: '♘', bB: '♗', bR: '♖', bQ: '♕', bK: '♔'
-    };
-
-    return (
-      <div style={{
-        width: '100%',
-        height: '100%',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        fontSize: squareWidth * 0.5,
-        fontWeight: 'bold',
-        color: piece[0] === 'w' ? '#ffffff' : '#000000',
-        textShadow: piece[0] === 'w' 
-          ? '0 0 4px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.6)' 
-          : '0 0 4px rgba(255,255,255,0.3), 0 0 8px rgba(255,255,255,0.2)',
-        userSelect: 'none',
-        cursor: 'pointer',
-        transition: 'all 0.2s ease'
-      }}>
-        {pieceSymbols[piece]}
-      </div>
-    );
-  }
-
-  // Custom square styling
-  function getCustomSquareStyles() {
-    const styles = {};
-    
-    if (selectedSquare) {
-      styles[selectedSquare] = {
-        background: 'radial-gradient(circle, rgba(255,255,0,0.4) 0%, transparent 70%)',
-        boxShadow: 'inset 0 0 20px rgba(255,255,0,0.6)'
-      };
-    }
-    
-    validMoves.forEach(square => {
-      styles[square] = {
-        background: 'radial-gradient(circle, rgba(0,255,0,0.3) 0%, transparent 70%)',
-        position: 'relative'
-      };
-    });
-    
-    return styles;
-  }
-
-  const currentPlayer = game.turn() === 'w' ? 'White' : 'Black';
   const boardOrientation = isVsBot ? playerColor : 'white';
 
   return (
@@ -363,176 +473,122 @@ export default function ChessGame() {
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
     }}>
       <div className="w-full max-w-2xl">
+        
         {/* Game Mode Selection */}
-        {!isVsBot && (
-          <div className="text-center mb-4">
-            <div className="bg-white/20 backdrop-blur-md rounded-xl p-4 border border-white/30 shadow-xl">
-              <h2 className="text-xl font-bold text-white mb-3">Choose Game Mode</h2>
-              <div className="flex flex-wrap justify-center gap-2">
-                <button
-                  onClick={() => startVsBotGame('white')}
-                  disabled={isLoading}
-                  className="bg-white/20 hover:bg-white/30 backdrop-blur-md text-white font-medium py-2 px-4 rounded-lg border border-white/30 transition-all duration-200 shadow-md hover:shadow-lg text-sm disabled:opacity-50"
-                >
-                  🤖 vs AdiBot (Play as White)
-                </button>
-                <button
-                  onClick={() => startVsBotGame('black')}
-                  disabled={isLoading}
-                  className="bg-white/20 hover:bg-white/30 backdrop-blur-md text-white font-medium py-2 px-4 rounded-lg border border-white/30 transition-all duration-200 shadow-md hover:shadow-lg text-sm disabled:opacity-50"
-                >
-                  🤖 vs AdiBot (Play as Black)
-                </button>
-                <button
-                  onClick={startPvPGame}
-                  className="bg-white/20 hover:bg-white/30 backdrop-blur-md text-white font-medium py-2 px-4 rounded-lg border border-white/30 transition-all duration-200 shadow-md hover:shadow-lg text-sm"
-                >
-                  👥 Player vs Player
-                </button>
-              </div>
-              {isLoading && (
-                <p className="text-white/80 text-sm mt-2">Loading AdiBot...</p>
-              )}
-            </div>
-          </div>
+        {gameMode === 'selection' && (
+          <BotSelector 
+            onBotCreated={handleBotCreated}
+            onStartPvP={handleStartPvP}
+          />
+        )}
+
+        {/* Bot Profile Display */}
+        {gameMode === 'bot' && currentBot && !isLoading && (
+          <BotProfile 
+            bot={currentBot}
+            onStartGame={() => {}} // Already started
+            onChangeBot={handleBackToSelection}
+          />
         )}
 
         {/* Game Status */}
-        <div className="text-center mb-2">
-          <div className="bg-white/20 backdrop-blur-md rounded-xl p-3 border border-white/30 shadow-xl">
-            {gameOver ? (
-              <div className="text-center">
-                <div className="text-3xl mb-1">🏆</div>
-                <h2 className="text-xl font-bold text-white mb-1">
-                  {winner === 'Draw' ? "It's a Draw!" : `${winner} Wins!`}
-                </h2>
-                <p className="text-white/80 text-sm">
-                  {game.isCheckmate() ? 'Checkmate!' : 
-                   game.isStalemate() ? 'Stalemate!' :
-                   game.isDraw() ? 'Draw!' : 'Game Over!'}
-                </p>
-              </div>
-            ) : (
-              <div className="text-center">
-                <h2 className="text-lg font-semibold text-white mb-1">
-                  {isVsBot ? (
-                    botThinking ? "🤖 AdiBot is thinking..." : 
-                    (playerColor === 'white' && game.turn() === 'w') || (playerColor === 'black' && game.turn() === 'b') ? 
-                    "Your turn" : "AdiBot's turn"
-                  ) : (
-                    `${currentPlayer}'s Turn`
-                  )}
-                </h2>
-                {game.isCheck() && (
-                  <p className="text-red-200 font-medium text-sm">Check!</p>
-                )}
-                {isVsBot && (
-                  <p className="text-white/70 text-xs">
-                    You are playing as {playerColor}
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
+        {(gameMode === 'bot' || gameMode === 'pvp') && (
+          <GameStatus 
+            gameOver={gameOver}
+            winner={winner}
+            game={game}
+            isVsBot={isVsBot}
+            botThinking={botThinking || botMoveInProgress}
+            playerColor={playerColor}
+            botName={currentBot?.displayName}
+          />
+        )}
 
         {/* Chess Board */}
-        <div className="bg-white/10 backdrop-blur-md rounded-xl p-2 mb-2 border border-white/20 shadow-2xl">
-          <Chessboard
-            position={fen}
-            onPieceDrop={onPieceDrop}
-            onSquareClick={onSquareClick}
-            boardWidth={boardWidth}
-            boardOrientation={boardOrientation}
-            customDarkSquareStyle={{ 
-              background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
-              boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.2)'
-            }}
-            customLightSquareStyle={{ 
-              background: 'linear-gradient(135deg, #c4b5fd 0%, #a78bfa 100%)',
-              boxShadow: 'inset 0 2px 4px rgba(255,255,255,0.2)'
-            }}
-            customBoardStyle={{
-              borderRadius: '0.5rem',
-              overflow: 'hidden',
-              boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)'
-            }}
-            customSquareStyles={getCustomSquareStyles()}
-            customPieces={{
-              wP: ({ squareWidth }) => <CustomPiece piece="wP" squareWidth={squareWidth} />,
-              wN: ({ squareWidth }) => <CustomPiece piece="wN" squareWidth={squareWidth} />,
-              wB: ({ squareWidth }) => <CustomPiece piece="wB" squareWidth={squareWidth} />,
-              wR: ({ squareWidth }) => <CustomPiece piece="wR" squareWidth={squareWidth} />,
-              wQ: ({ squareWidth }) => <CustomPiece piece="wQ" squareWidth={squareWidth} />,
-              wK: ({ squareWidth }) => <CustomPiece piece="wK" squareWidth={squareWidth} />,
-              bP: ({ squareWidth }) => <CustomPiece piece="bP" squareWidth={squareWidth} />,
-              bN: ({ squareWidth }) => <CustomPiece piece="bN" squareWidth={squareWidth} />,
-              bB: ({ squareWidth }) => <CustomPiece piece="bB" squareWidth={squareWidth} />,
-              bR: ({ squareWidth }) => <CustomPiece piece="bR" squareWidth={squareWidth} />,
-              bQ: ({ squareWidth }) => <CustomPiece piece="bQ" squareWidth={squareWidth} />,
-              bK: ({ squareWidth }) => <CustomPiece piece="bK" squareWidth={squareWidth} />,
-            }}
-            areArrowsAllowed={true}
-            arePremovesAllowed={false}
-            isDraggablePiece={({ piece }) => {
-              if (gameOver) return false;
-              if (isVsBot) {
-                if (botThinking) return false;
-                const isPlayerTurn = (playerColor === 'white' && game.turn() === 'w') || 
-                                   (playerColor === 'black' && game.turn() === 'b');
-                return isPlayerTurn && piece[0] === game.turn();
+        {(gameMode === 'bot' || gameMode === 'pvp') && (
+          <div className="bg-white/10 backdrop-blur-md rounded-xl p-2 mb-2 border border-white/20 shadow-2xl">
+            <Chessboard
+              position={fen}
+              onPieceDrop={onPieceDrop}
+              onSquareClick={onSquareClick}
+              boardWidth={boardWidth}
+              boardOrientation={boardOrientation}
+              customDarkSquareStyle={{ 
+                background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+                boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.2)'
+              }}
+              customLightSquareStyle={{ 
+                background: 'linear-gradient(135deg, #c4b5fd 0%, #a78bfa 100%)',
+                boxShadow: 'inset 0 2px 4px rgba(255,255,255,0.2)'
+              }}
+              customBoardStyle={{
+                borderRadius: '0.5rem',
+                overflow: 'hidden',
+                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)'
+              }}
+              customSquareStyles={getCustomSquareStyles(selectedSquare, validMoves)}
+              customPieces={customPieces}
+              areArrowsAllowed={true}
+              arePremovesAllowed={false}
+              isDraggablePiece={(pieceInfo) => 
+                isDraggablePiece(pieceInfo, gameOver, isVsBot, botThinking || botMoveInProgress, playerColor, game)
               }
-              return piece[0] === game.turn();
-            }}
-          />
-        </div>
+            />
+          </div>
+        )}
 
         {/* Game Controls */}
-        <div className="flex justify-center space-x-3 mb-2">
-          <button
-            onClick={resetGame}
-            className="bg-white/20 hover:bg-white/30 backdrop-blur-md text-white font-medium py-2 px-4 rounded-lg border border-white/30 transition-all duration-200 shadow-md hover:shadow-lg text-sm"
-          >
-            🔄 New Game
-          </button>
-          {isVsBot && (
-            <button
-              onClick={() => setIsVsBot(false)}
-              className="bg-white/20 hover:bg-white/30 backdrop-blur-md text-white font-medium py-2 px-4 rounded-lg border border-white/30 transition-all duration-200 shadow-md hover:shadow-lg text-sm"
-            >
-              🏠 Game Mode
-            </button>
-          )}
-        </div>
+        {(gameMode === 'bot' || gameMode === 'pvp') && (
+          <GameControls 
+            onResetGame={resetGame}
+            isVsBot={isVsBot}
+            onBackToModeSelection={handleBackToSelection}
+          />
+        )}
 
         {/* Game Instructions */}
-        <div className="mt-4 bg-white/10 backdrop-blur-md rounded-lg p-3 border border-white/20 text-sm">
-          <h3 className="font-semibold text-white mb-1">How to Play:</h3>
-          <ul className="text-white/80 space-y-1">
-            <li>• Choose to play against AdiBot or another player</li>
-            <li>• Tap a piece to select it and see valid moves</li>
-            <li>• Tap a highlighted square to move there</li>
-            <li>• Or drag and drop pieces to move</li>
-            <li>• AdiBot learns from your personal Chess.com game history</li>
-          </ul>
-        </div>
+        {gameMode === 'selection' && <GameInstructions />}
+
+        {/* Loading State */}
+        {isLoading && (
+          <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20 text-center">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-white mb-4"></div>
+            <p className="text-white text-lg">Creating your opponent...</p>
+            <p className="text-white/70 text-sm mt-2">
+              Analyzing games and building personality profile
+            </p>
+          </div>
+        )}
+
+        {/* Bot Thinking Indicator */}
+        {(botThinking || botMoveInProgress) && gameMode === 'bot' && (
+          <div className="bg-white/10 backdrop-blur-md rounded-xl p-4 border border-white/20 text-center mb-4">
+            <div className="inline-block animate-pulse rounded-full h-6 w-6 bg-yellow-400 mb-2"></div>
+            <p className="text-white text-sm">
+              {currentBot?.displayName} is thinking...
+            </p>
+          </div>
+        )}
+
+        {/* Debug Info (remove in production) */}
+        {process.env.NODE_ENV === 'development' && gameMode === 'bot' && (
+          <div className="bg-black/20 backdrop-blur-md rounded-xl p-4 border border-white/10 text-center mt-4">
+            <p className="text-white text-xs mb-2">Debug Info:</p>
+            <p className="text-white/70 text-xs">
+              Turn: {game.turn() === 'w' ? 'White' : 'Black'} | 
+              Player: {playerColor} | 
+              Bot Thinking: {botThinking ? 'Yes' : 'No'} | 
+              Bot Move In Progress: {botMoveInProgress ? 'Yes' : 'No'} | 
+              Game Over: {gameOver ? 'Yes' : 'No'}
+            </p>
+            <p className="text-white/70 text-xs">
+              FEN: {fen.slice(0, 50)}...
+            </p>
+          </div>
+        )}
 
         {/* Sound Elements */}
-        <audio ref={moveSound} preload="auto">
-          <source src="/move.mp3" type="audio/wav" />
-        </audio>
-        <audio ref={captureSound} preload="auto">
-          <source src="/capture.mp3" type="audio/wav" />
-        </audio>
-        <audio ref={castleSound} preload="auto">
-          <source src="/castle.mp3" type="audio/wav" />
-        </audio>
-        <audio ref={moveCheckSound} preload="auto">
-          <source src="/move-check.mp3" type="audio/wav" />
-        </audio>
-        <audio ref={promoteSound} preload="auto">
-          <source src="/promote.mp3" type="audio/wav" />
-        </audio>
+        <SoundElements />
       </div>
     </div>
   );
