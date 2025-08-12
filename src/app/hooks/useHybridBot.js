@@ -1,72 +1,80 @@
-// hooks/useHybridBot.js - Move Tree + Stockfish Engine System
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Chess } from 'chess.js';
 
-// Player personality analysis from games
-const analyzePlayerStyle = (games, username) => {
-  let totalGames = 0;
-  let wins = 0;
-  let tacticalMoves = 0;
-  let aggressiveMoves = 0;
-  let fastGames = 0;
-  let averageGameLength = 0;
-  
-  const openings = {};
-  
-  games.forEach(game => {
-    if (!game.pgn) return;
-    
-    totalGames++;
-    
-    // Determine if this player won
-    const isWhite = game.white?.username?.toLowerCase() === username.toLowerCase();
-    const result = game.white?.result;
-    if ((isWhite && result === 'win') || (!isWhite && result !== 'win' && result !== 'draw')) {
-      wins++;
-    }
-    
-    // Analyze time control (fast vs slow)
-    if (game.time_control && parseInt(game.time_control) < 600) {
-      fastGames++;
-    }
-    
-    // Basic PGN analysis for opening detection
-    try {
-      const moves = game.pgn.split(/\d+\./).slice(1).map(m => m.trim().split(' ')[0]).filter(m => m);
-      averageGameLength += moves.length;
-      
-      // Track opening moves (first 6 moves)
-      if (moves.length >= 2) {
-        const opening = moves.slice(0, 2).join(' ');
-        openings[opening] = (openings[opening] || 0) + 1;
-      }
-      
-      // Simple heuristics for style
-      const pgnText = game.pgn.toLowerCase();
-      if (pgnText.includes('x')) tacticalMoves++; // Captures
-      if (pgnText.includes('!') || pgnText.includes('?!')) aggressiveMoves++; // Exciting moves
-      
-    } catch (e) {
-      // Skip problematic PGNs
-    }
-  });
-  
-  if (totalGames === 0) return getDefaultPersonality();
-  
-  averageGameLength = averageGameLength / totalGames;
-  
-  return {
-    aggression: Math.min((aggressiveMoves / totalGames) + (fastGames / totalGames), 1),
-    tactics: Math.min(tacticalMoves / totalGames, 1),
-    winRate: wins / totalGames,
-    speed: fastGames / totalGames,
-    gameLength: averageGameLength,
-    preferredOpenings: openings,
-    gamesAnalyzed: totalGames
-  };
+// Enhanced debug logger
+const debug = {
+  log: (...args) => console.log('[DEBUG]', new Date().toISOString(), ...args),
+  error: (...args) => console.error('[ERROR]', new Date().toISOString(), ...args),
+  warn: (...args) => console.warn('[WARN]', new Date().toISOString(), ...args)
 };
 
-const getDefaultPersonality = () => ({
+// Enhanced engine settings with validation
+const personalityToEngineSettings = (personality, rating) => {
+  try {
+    debug.log('Generating engine settings');
+    const baseRating = Math.max(400, Math.min(2800, rating || 1200));
+    
+    const settings = {
+      depth: Math.max(1, Math.min(15, Math.floor(baseRating / 200))),
+      skillLevel: Math.max(1, Math.min(20, Math.floor(baseRating / 140))),
+      moveTime: personality.speed > 0.6 ? 500 : (personality.speed > 0.3 ? 1500 : 3000),
+      contempt: Math.floor(personality.aggression * 50),
+      multipv: personality.tactics > 0.6 ? 3 : 1,
+      errorRate: Math.max(0, (2000 - baseRating) / 2000)
+    };
+
+    debug.log('Engine settings generated:', settings);
+    return settings;
+  } catch (error) {
+    debug.error('Failed to generate engine settings:', error);
+    return {
+      depth: 3,
+      skillLevel: 8,
+      moveTime: 1500,
+      contempt: 25,
+      multipv: 1,
+      errorRate: 0.2
+    };
+  }
+};
+
+// Helper functions
+const getEnhancedDemoTree = () => ({
+  "e4": {
+    "__games": 150,
+    "e5": {
+      "__games": 85,
+      "Nf3": {
+        "__games": 60,
+        "Nc6": {
+          "__games": 35,
+          "Bb5": { "__games": 20 },
+          "Bc4": { "__games": 15 }
+        },
+        "Nf6": { "__games": 15 }
+      }
+    },
+    "c5": {
+      "__games": 40,
+      "Nf3": { "__games": 25 }
+    }
+  },
+  "d4": {
+    "__games": 120,
+    "d5": {
+      "__games": 70,
+      "c4": { "__games": 45 }
+    },
+    "Nf6": { "__games": 35 }
+  },
+  "Nf3": {
+    "__games": 60,
+    "d5": { "__games": 25 },
+    "Nf6": { "__games": 20 }
+  }
+});
+
+const getDefaultStyle = () => ({
   aggression: 0.5,
   tactics: 0.5,
   winRate: 0.5,
@@ -76,29 +84,12 @@ const getDefaultPersonality = () => ({
   gamesAnalyzed: 0
 });
 
-// Convert personality to engine settings
-const personalityToEngineSettings = (personality, rating) => {
-  const baseRating = Math.max(400, Math.min(2800, rating || 1200));
-  
-  return {
-    // Engine depth based on rating (higher rating = deeper search)
-    depth: Math.max(1, Math.min(15, Math.floor(baseRating / 200))),
-    
-    // Skill level (1-20, where 20 is strongest)
-    skillLevel: Math.max(1, Math.min(20, Math.floor(baseRating / 140))),
-    
-    // Time per move based on speed preference
-    moveTime: personality.speed > 0.6 ? 500 : (personality.speed > 0.3 ? 1500 : 3000),
-    
-    // Contempt factor (aggression)
-    contempt: Math.floor(personality.aggression * 50),
-    
-    // Multiple variations for tactical players
-    multipv: personality.tactics > 0.6 ? 3 : 1,
-    
-    // Error probability (lower rating = more errors)
-    errorRate: Math.max(0, (2000 - baseRating) / 2000)
-  };
+// Enhanced thinking simulation
+const simulateThinking = async (bot, contextId) => {
+  const time = bot?.engineSettings?.moveTime || 1000;
+  const duration = Math.max(500, time + (Math.random() - 0.5) * time * 0.3);
+  debug.log(`[${contextId}] Simulating thinking for ${duration}ms`);
+  await new Promise(resolve => setTimeout(resolve, duration));
 };
 
 export function useHybridBot() {
@@ -108,315 +99,351 @@ export function useHybridBot() {
   const [isLoading, setIsLoading] = useState(false);
   const [botThinking, setBotThinking] = useState(false);
   const [stockfishReady, setStockfishReady] = useState(false);
+  const [lastError, setLastError] = useState(null);
 
-  // Initialize Stockfish engine
+  // Initialize Stockfish engine with detailed logging
   useEffect(() => {
+    let isMounted = true;
+    const initId = `engine-init-${Date.now()}`;
+    
     const initStockfish = async () => {
       try {
-        // For now, we'll use a CDN version since npm might not work in all environments
-        const wasmSupported = (() => {
-          try {
-            if (typeof WebAssembly === "object"
-              && typeof WebAssembly.instantiate === "function") {
-              // eslint-disable-next-line @next/next/no-assign-module-variable
-              const module = new WebAssembly.Module(Uint8Array.of(0x0, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00));
-              if (module instanceof WebAssembly.Module)
-                return new WebAssembly.Instance(module) instanceof WebAssembly.Instance;
-            }
-          } catch (e) {}
-          return false;
-        })();
+        debug.log(`[${initId}] Starting engine initialization`);
+        setLastError(null);
         
-        console.log('🔧 Initializing Stockfish engine...');
-        console.log('WASM supported:', wasmSupported);
-        
-        // Note: In a real implementation, you'd load Stockfish here
-        // For demo purposes, we'll simulate the engine
+        // Mock engine - replace with actual Stockfish in production
         const mockEngine = {
-          postMessage: (cmd) => console.log('Stockfish command:', cmd),
-          addMessageListener: (callback) => {},
-          removeMessageListener: (callback) => {}
+          id: initId,
+          postMessage: (cmd) => debug.log(`[${initId}] Engine command: ${cmd}`),
+          addMessageListener: (callback) => debug.log(`[${initId}] Listener added`),
+          removeMessageListener: (callback) => debug.log(`[${initId}] Listener removed`),
+          terminate: () => debug.log(`[${initId}] Engine terminated`)
         };
-        
-        setStockfish(mockEngine);
-        setStockfishReady(true);
-        console.log('✅ Stockfish engine ready');
-        
+
+        // Simulate initialization delay
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        if (isMounted) {
+          setStockfish(mockEngine);
+          setStockfishReady(true);
+          debug.log(`[${initId}] Engine initialized successfully`);
+        }
       } catch (error) {
-        console.error('❌ Failed to initialize Stockfish:', error);
-        setStockfishReady(false);
+        debug.error(`[${initId}] Engine initialization failed:`, error);
+        if (isMounted) {
+          setStockfishReady(false);
+          setLastError(`Engine init failed: ${error.message}`);
+        }
       }
     };
 
     initStockfish();
+    
+    return () => {
+      isMounted = false;
+      debug.log(`[${initId}] Cleaning up engine`);
+      if (stockfish) {
+        stockfish.terminate();
+      }
+    };
   }, []);
 
-  // Create bot from any Chess.com player
-  const createBotFromPlayer = async (username) => {
-    setIsLoading(true);
-    try {
-      console.log(`🔍 Creating bot from player: ${username}`);
-      
-      // Step 1: Fetch player info
-      const playerResponse = await fetch(`https://api.chess.com/pub/player/${username}`);
-      if (!playerResponse.ok) throw new Error('Player not found');
-      const playerData = await playerResponse.json();
-      
-      // Step 2: Get recent game archives (last 6 months)
-      const now = new Date();
-      const archives = [];
-      for (let i = 0; i < 6; i++) {
-        const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        archives.push(`https://api.chess.com/pub/player/${username}/games/${year}/${month}`);
-      }
-      
-      // Step 3: Fetch games and build move tree
-      const { games: allGames, moveTree: playerMoveTree } = await fetchAndBuildMoveTree(archives);
-      
-      // Step 4: Analyze playing style
-      const personality = analyzePlayerStyle(allGames, username);
-      const rating = playerData.stats?.chess_rapid?.last?.rating || 
-                    playerData.stats?.chess_blitz?.last?.rating || 1200;
-      
-      // Step 5: Create engine configuration
-      const engineSettings = personalityToEngineSettings(personality, rating);
-      
-      const botProfile = {
-        username: username.toLowerCase(),
-        displayName: playerData.name || username,
-        rating,
-        personality,
-        engineSettings,
-        gamesAnalyzed: allGames.length,
-        avatar: playerData.avatar,
-        country: playerData.country,
-        title: playerData.title
-      };
-      
-      setCurrentBot(botProfile);
-      setMoveTree(playerMoveTree);
-      
-      console.log(`✅ Bot created for ${username}:`, botProfile);
-      console.log(`📊 Personality:`, personality);
-      console.log(`⚙️ Engine settings:`, engineSettings);
-      console.log(`📖 Move tree size:`, Object.keys(playerMoveTree).length);
-      
-      return botProfile;
-      
-    } catch (error) {
-      console.error(`❌ Failed to create bot for ${username}:`, error);
-      throw error;
-    } finally {
-      setIsLoading(false);
-    }
+  // 🔧 CRITICAL FIX: Updated bot creation to properly set state
+const createBotFromPlayer = useCallback(async (username, retryCount = 0) => {
+  const botId = `bot-${username}-${Date.now()}`;
+  
+  // Initialize with fallback data FIRST
+  let botProfile = {
+    id: botId,
+    username: username.toLowerCase(),
+    displayName: `${username} Bot`,
+    rating: 1200,
+    personality: getDefaultStyle(),
+    engineSettings: personalityToEngineSettings(getDefaultStyle(), 1200),
+    gamesAnalyzed: 0,
+    isFallback: true
   };
 
-  // Fetch games and build move tree
-  const fetchAndBuildMoveTree = async (archives) => {
-    const moveTree = {};
-    let allGames = [];
-    let errorCount = 0;
+  try {
+    const response = await fetch(`/api/fetchgames?username=${encodeURIComponent(username)}`);
+    const data = await response.json();
+    if (!data.player) {
+     console.warn('API returned no player data, using fallback');
+      return botProfile; // Return early with fallback
+} 
 
-    for (const archiveUrl of archives) {
-      try {
-        const res = await fetch(archiveUrl);
-        const data = await res.json();
-        const games = data.games || [];
-        allGames = allGames.concat(games);
+    // Only override fields if API data exists
+    botProfile = {
+      ...botProfile, // Keep fallback as baseline
+      displayName: data.player?.displayName || `${username} Bot`,
+      rating: data.player?.rating || 1200,
+      personality: data.style || getDefaultStyle(),
+      engineSettings: personalityToEngineSettings(data.style || getDefaultStyle(), data.player?.rating),
+      gamesAnalyzed: data.stats?.totalGames || 0,
+      avatar: data.player?.avatar,
+      country: data.player?.country,
+      title: data.player?.title,
+      isFallback: false // Mark as real bot
+    };
 
-        // Build move tree from games
-        for (const game of games) {
-          if (!game.pgn) continue;
+    setCurrentBot(botProfile);
+    setMoveTree(data.moveTree || getEnhancedDemoTree());
+    console.log('Final bot being returned:', {
+  id: botProfile.id,
+  name: botProfile.displayName,
+  rating: botProfile.rating,
+  isFallback: botProfile.isFallback
+});
+return botProfile;
+    return botProfile; // ✅ Always returns an object
 
-          try {
-            const chess = new Chess();
-            chess.loadPgn(game.pgn);
-            const history = chess.history();
-            
-            if (history.length > 0) {
-              buildMoveTree(history, moveTree);
-            }
-          } catch (e) {
-            errorCount++;
-          }
-        }
-      } catch (err) {
-        console.warn(`Failed to fetch: ${archiveUrl}`);
-      }
+  } catch (error) {
+    console.error('Using fallback bot due to error:', error);
+    setCurrentBot(botProfile);
+    setMoveTree(getEnhancedDemoTree());
+    return botProfile; // ✅ Still returns fallback
+  } finally {
+    setIsLoading(false);
+  }
+}, []);
+
+  // Updated getBotMove to have better error handling and logging
+  const getBotMove = useCallback(async (gameInstance, gameHistory = []) => {
+    const moveId = `move-${Date.now()}`;
+    
+    debug.log(`[${moveId}] getBotMove called - currentBot: ${currentBot?.displayName || 'None'}`);
+    
+    if (!currentBot) {
+      debug.error(`[${moveId}] No current bot available`);
+      return null;
     }
 
-    console.log(`📊 Processed ${allGames.length} games, ${errorCount} errors`);
-    return { games: allGames, moveTree };
-  };
-
-  // Build move tree from game history
-  const buildMoveTree = (moves, tree) => {
-    let node = tree;
-    for (const move of moves) {
-      if (!node[move]) {
-        node[move] = { __games: 0 };
-      }
-      node[move].__games += 1;
-      node = node[move];
+    if (botThinking) {
+      debug.warn(`[${moveId}] Bot is already thinking`);
+      return null;
     }
-  };
-
-  // Hybrid move selection: Tree + Engine
-  const getBotMove = async (gameInstance, gameHistory) => {
-    if (!currentBot) return null;
 
     setBotThinking(true);
-    
+    setLastError(null);
+
     try {
-      const game = new Chess(gameInstance.fen());
-      const moveCount = gameHistory.length;
-      const isOpening = moveCount < 20; // First 10 moves per side
-      const isTactical = isPositionTactical(game);
+      debug.log(`[${moveId}] ${currentBot.displayName} is thinking...`);
+
+      // Validate game instance
+      if (!gameInstance || typeof gameInstance.fen !== 'function') {
+        throw new Error('Invalid game instance provided');
+      }
+
+      const fen = gameInstance.fen();
+      const game = new Chess(fen);
       
-      console.log(`🤖 ${currentBot.displayName} thinking... (move ${moveCount + 1}, tactical: ${isTactical})`);
-      
-      // PRIORITY 1: Use Move Tree for opening moves
-      if (isOpening && moveTree && !isTactical) {
-        const treeMove = getTreeMove(gameHistory, moveTree, game);
+      // Get legal moves
+      const legalMoves = game.moves();
+      if (legalMoves.length === 0) {
+        debug.log(`[${moveId}] No legal moves - game over`);
+        return null;
+      }
+
+      debug.log(`[${moveId}] Position: ${fen}`);
+      debug.log(`[${moveId}] Legal moves (${legalMoves.length}): ${legalMoves.slice(0, 8).join(', ')}`);
+
+      // Use actual game history, not the parameter
+      const actualHistory = game.history();
+      const moveCount = actualHistory.length;
+      const isOpening = moveCount < 16;
+
+      debug.log(`[${moveId}] Move count: ${moveCount}, Opening: ${isOpening}`);
+
+      // Strategy 1: Try move tree in opening
+      if (isOpening && moveTree && Object.keys(moveTree).length > 0) {
+        debug.log(`[${moveId}] Attempting tree move`);
+        const treeMove = getTreeMove(actualHistory, moveTree, legalMoves, moveId);
         if (treeMove) {
-          console.log(`📖 Using ${currentBot.displayName}'s opening repertoire: ${treeMove}`);
-          await simulateThinking();
+          await simulateThinking(currentBot, moveId);
+          debug.log(`[${moveId}] Selected tree move: ${treeMove}`);
           return treeMove;
         }
       }
+
+      // Strategy 2: Intelligent fallback
+      debug.log(`[${moveId}] Using intelligent fallback`);
+      const smartMove = getIntelligentMove(game, moveId);
+      await simulateThinking(currentBot, moveId);
+      debug.log(`[${moveId}] Selected smart move: ${smartMove}`);
+      return smartMove;
+
+    } catch (error) {
+      debug.error(`[${moveId}] Move generation failed:`, error.message);
+      setLastError(`Move error: ${error.message}`);
       
-      // PRIORITY 2: Use engine for tactical positions or when tree exhausted
-      if (stockfishReady) {
-        console.log(`⚡ Using engine for ${currentBot.displayName} (${isTactical ? 'tactical' : 'positional'})`);
-        const engineMove = await getEngineMove(game, gameHistory);
-        if (engineMove) return engineMove;
+      // Emergency fallback
+      try {
+        const game = new Chess(gameInstance.fen());
+        const moves = game.moves();
+        if (moves.length > 0) {
+          debug.log(`[${moveId}] Emergency fallback: ${moves[0]}`);
+          return moves[0];
+        }
+      } catch (e) {
+        debug.error(`[${moveId}] Emergency fallback failed:`, e.message);
       }
       
-      // FALLBACK: Intelligent random move
-      const moves = game.moves();
-      const randomMove = moves[Math.floor(Math.random() * moves.length)];
-      console.log(`🎲 Fallback random move: ${randomMove}`);
-      await simulateThinking();
-      return randomMove;
-      
-    } catch (error) {
-      console.error('Error getting bot move:', error);
       return null;
+
     } finally {
       setBotThinking(false);
+      debug.log(`[${moveId}] Move generation completed`);
     }
-  };
+  }, [currentBot, moveTree, botThinking]);
 
-  // Check if position requires tactical calculation
-  const isPositionTactical = (game) => {
-    if (game.inCheck()) return true;
-    
-    const moves = game.moves({ verbose: true });
-    const hasCaptures = moves.some(move => move.captured);
-    const hasChecks = moves.some(move => {
-      game.move(move);
-      const inCheck = game.inCheck();
-      game.undo();
-      return inCheck;
-    });
-    
-    return hasCaptures || hasChecks;
-  };
-
-  // Get move from player's move tree
-  const getTreeMove = (gameHistory, moveTree, game) => {
+  // Robust tree move selection
+  const getTreeMove = (gameHistory, moveTree, legalMoves, contextId) => {
     try {
-      let node = moveTree;
+      debug.log(`[${contextId}] Tree search - History: ${gameHistory.join(' ')}`);
       
-      // Follow the game path in the tree
+      let currentNode = moveTree;
+      let depth = 0;
+      
+      // Navigate through the tree following game history
       for (const move of gameHistory) {
-        if (!node[move]) return null;
-        node = node[move];
+        if (currentNode[move] && typeof currentNode[move] === 'object') {
+          currentNode = currentNode[move];
+          depth++;
+          debug.log(`[${contextId}] Tree: ${depth}. ${move} ✓ (${currentNode.__games || 0} games)`);
+        } else {
+          debug.log(`[${contextId}] Tree: ${depth + 1}. ${move} ✗ (path ends)`);
+          break;
+        }
       }
-      
-      // Get available moves from tree
-      const treeMoves = Object.entries(node)
-        .filter(([key]) => key !== '__games' && key !== '_stats')
-        .map(([move, data]) => ({
+
+      // Get available moves from current tree position
+      const treeMoves = [];
+      for (const [move, data] of Object.entries(currentNode)) {
+        if (move === '__games' || move.startsWith('_') || typeof data !== 'object') {
+          continue;
+        }
+        treeMoves.push({
           move,
-          count: data.__games || 0,
-        }));
+          games: data.__games || 0
+        });
+      }
+
+      debug.log(`[${contextId}] Tree moves available: ${treeMoves.length}`);
       
-      if (treeMoves.length === 0) return null;
+      if (treeMoves.length === 0) {
+        return null;
+      }
+
+      // Filter to legal moves only
+      const legalTreeMoves = treeMoves.filter(tm => legalMoves.includes(tm.move));
       
-      // Filter to legal moves
-      const legalMoves = game.moves();
-      const validMoves = treeMoves.filter(tm => legalMoves.includes(tm.move));
-      
-      if (validMoves.length === 0) return null;
-      
-      // Select move based on popularity with some variety
-      validMoves.sort((a, b) => b.count - a.count);
-      
-      // 70% chance for most played, 30% for variety
+      if (legalTreeMoves.length === 0) {
+        debug.log(`[${contextId}] No legal tree moves found`);
+        return null;
+      }
+
+      // Sort by popularity and add randomness
+      legalTreeMoves.sort((a, b) => b.games - a.games);
+      debug.log(`[${contextId}] Legal tree moves:`, legalTreeMoves.map(m => `${m.move}(${m.games})`));
+
+      // 70% most popular, 30% variety
       if (Math.random() < 0.7) {
-        return validMoves[0].move;
+        return legalTreeMoves[0].move;
       } else {
-        const topMoves = validMoves.slice(0, Math.min(3, validMoves.length));
+        const topMoves = legalTreeMoves.slice(0, Math.min(3, legalTreeMoves.length));
         return topMoves[Math.floor(Math.random() * topMoves.length)].move;
       }
-      
+
     } catch (error) {
-      console.error('Error in getTreeMove:', error);
+      debug.error(`[${contextId}] Tree move selection error:`, error.message);
       return null;
     }
   };
 
-  // Get move from engine (simulated for now)
-  const getEngineMove = async (game, gameHistory) => {
-    const settings = currentBot.engineSettings;
-    
-    // Simulate engine thinking time
-    await new Promise(resolve => setTimeout(resolve, settings.moveTime));
-    
-    // For demo: return a reasonable move
-    // In real implementation, this would use Stockfish
-    const moves = game.moves();
-    
-    // Simulate different playing strengths
-    if (Math.random() < settings.errorRate) {
-      // Make a suboptimal move occasionally
-      return moves[Math.floor(Math.random() * moves.length)];
+  // Intelligent move selection
+  const getIntelligentMove = (game, contextId) => {
+    try {
+      const moves = game.moves({ verbose: true });
+      
+      // Priority 1: Checkmate
+      for (const move of moves) {
+        game.move(move);
+        if (game.inCheckmate()) {
+          game.undo();
+          debug.log(`[${contextId}] Found checkmate: ${move.san}`);
+          return move.san;
+        }
+        game.undo();
+      }
+
+      // Priority 2: Best captures
+      const pieceValues = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 100 };
+      const captures = moves
+        .filter(move => move.captured)
+        .sort((a, b) => (pieceValues[b.captured] || 0) - (pieceValues[a.captured] || 0));
+
+      if (captures.length > 0) {
+        debug.log(`[${contextId}] Best capture: ${captures[0].san}`);
+        return captures[0].san;
+      }
+
+      // Priority 3: Checks (sometimes)
+      if (Math.random() < 0.2) {
+        const checks = [];
+        for (const move of moves) {
+          game.move(move);
+          if (game.inCheck()) {
+            checks.push(move);
+          }
+          game.undo();
+        }
+        if (checks.length > 0) {
+          debug.log(`[${contextId}] Check: ${checks[0].san}`);
+          return checks[0].san;
+        }
+      }
+
+      // Priority 4: Development in opening
+      const history = game.history();
+      if (history.length < 16) {
+        const developments = moves.filter(move => 
+          ['n', 'b'].includes(move.piece) && 
+          (move.from[1] === '1' || move.from[1] === '8') &&
+          !move.captured
+        );
+        
+        if (developments.length > 0) {
+          debug.log(`[${contextId}] Development: ${developments[0].san}`);
+          return developments[0].san;
+        }
+      }
+
+      // Priority 5: Center control
+      const centerMoves = moves.filter(move => 
+        ['e4', 'e5', 'd4', 'd5', 'c4', 'f4'].includes(move.to)
+      );
+      
+      if (centerMoves.length > 0 && Math.random() < 0.4) {
+        debug.log(`[${contextId}] Center control: ${centerMoves[0].san}`);
+        return centerMoves[0].san;
+      }
+
+      // Default: Random move
+      const randomMove = moves[Math.floor(Math.random() * moves.length)].san;
+      debug.log(`[${contextId}] Random: ${randomMove}`);
+      return randomMove;
+
+    } catch (error) {
+      debug.error(`[${contextId}] Intelligent move error:`, error.message);
+      const moves = game.moves();
+      return moves.length > 0 ? moves[0] : null;
     }
-    
-    // Try to make a good move (prioritize captures, checks)
-    const captures = moves.filter(move => {
-      const moveObj = game.move(move);
-      const isCapture = moveObj?.captured;
-      game.undo();
-      return isCapture;
-    });
-    
-    if (captures.length > 0) {
-      return captures[0]; // Take a piece
-    }
-    
-    // Otherwise, make a developing move
-    const developingMoves = moves.filter(move => 
-      ['N', 'B'].includes(move[0]) && !['x', '+', '#'].some(char => move.includes(char))
-    );
-    
-    if (developingMoves.length > 0 && gameHistory.length < 16) {
-      return developingMoves[0];
-    }
-    
-    return moves[Math.floor(Math.random() * moves.length)];
   };
 
-  // Simulate thinking time based on personality
-  const simulateThinking = async () => {
-    const baseTime = currentBot.engineSettings.moveTime;
-    const variance = baseTime * 0.3;
-    const thinkingTime = baseTime + (Math.random() - 0.5) * variance;
-    await new Promise(resolve => setTimeout(resolve, Math.max(500, thinkingTime)));
-  };
+  // Add debug logging for state changes
+  useEffect(() => {
+    debug.log('🔍 Hook State Update - currentBot:', currentBot?.displayName || 'None');
+  }, [currentBot]);
 
   return {
     currentBot,
@@ -424,6 +451,7 @@ export function useHybridBot() {
     isLoading,
     botThinking,
     stockfishReady,
+    lastError,
     createBotFromPlayer,
     getBotMove,
     stockfish

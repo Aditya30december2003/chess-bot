@@ -5,28 +5,50 @@ import { useHybridBot } from '../hooks/useHybridBot';
 export function BotSelector({ onBotCreated, onStartPvP }) {
   const [username, setUsername] = useState('');
   const [selectedColor, setSelectedColor] = useState('white');
-  const { createBotFromPlayer, isLoading, stockfishReady } = useHybridBot();
+  const { createBotFromPlayer, isLoading, stockfishReady, currentBot } = useHybridBot();
 
-  const handleCreateBot = async () => {
-    if (!username.trim()) return;
+const handleCreateBot = async () => {
+  if (!username.trim()) return;
+  
+  console.log('🎯 Starting bot creation for', username);
+  
+  try {
+    const bot = await createBotFromPlayer(username.toLowerCase());
+    console.log('🎯 createBotFromPlayer returned:', bot);
     
-    try {
-      const bot = await createBotFromPlayer(username.toLowerCase());
+    if (bot) {
+      console.log('🚀 Calling onBotCreated with:', bot.displayName);
       onBotCreated(bot, selectedColor);
-    } catch (error) {
-      alert(`Failed to create bot for "${username}". Please check the username and try again.`);
+    } else {
+      console.error('❌ No bot available after creation');
+      alert('Bot creation failed. Please try again.');
     }
-  };
+  } catch (error) {
+    console.error('❌ Error creating bot:', error);
+    alert(`Failed to create bot: ${error.message}`);
+  }
+};
 
-  const handlePresetBot = async (presetUsername) => {
-    setUsername(presetUsername);
-    try {
-      const bot = await createBotFromPlayer(presetUsername);
+const handlePresetBot = async (presetUsername) => {
+  setUsername(presetUsername);
+  console.log('🎯 Starting preset bot for', presetUsername);
+  
+  try {
+    const bot = await createBotFromPlayer(presetUsername);
+    console.log('🎯 createBotFromPlayer returned:', bot);
+    
+    if (bot) {
+      console.log('🚀 Calling onBotCreated with:', bot.displayName);
       onBotCreated(bot, selectedColor);
-    } catch (error) {
-      alert(`Failed to create ${presetUsername} bot. Please try again.`);
+    } else {
+      console.error('❌ No bot available after creation');
+      alert('Preset bot creation failed.');
     }
-  };
+  } catch (error) {
+    console.error('❌ Error creating preset bot:', error);
+    alert(`Failed to create ${presetUsername} bot.`);
+  }
+};
 
   const popularBots = [
     { 
@@ -86,6 +108,18 @@ export function BotSelector({ onBotCreated, onStartPvP }) {
           Engine: {stockfishReady ? 'Ready' : 'Loading...'}
         </span>
       </div>
+
+      {/* Debug Info */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="bg-black/20 backdrop-blur-md rounded-xl p-4 border border-white/10 text-center mb-4">
+          <p className="text-white text-xs mb-2">BotSelector Debug:</p>
+          <p className="text-white/70 text-xs">
+            currentBot: {currentBot ? `${currentBot.displayName} (${currentBot.id})` : 'None'} |
+            isLoading: {isLoading ? 'Yes' : 'No'} |
+            stockfishReady: {stockfishReady ? 'Yes' : 'No'}
+          </p>
+        </div>
+      )}
 
       {/* Color Selection */}
       <div className="mb-6">
