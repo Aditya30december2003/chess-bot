@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Chess } from 'chess.js';
 
 // Enhanced debug logger
@@ -23,6 +23,7 @@ const personalityToEngineSettings = (personality, rating) => {
       errorRate: Math.max(0, (2000 - baseRating) / 2000)
     };
 
+    
     debug.log('Engine settings generated:', settings);
     return settings;
   } catch (error) {
@@ -94,12 +95,21 @@ const simulateThinking = async (bot, contextId) => {
 
 export function useHybridBot() {
   const [stockfish, setStockfish] = useState(null);
-  const [currentBot, setCurrentBot] = useState(null);
+  const [currentBot, _setCurrentBot] = useState(null);
   const [moveTree, setMoveTree] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [botThinking, setBotThinking] = useState(false);
   const [stockfishReady, setStockfishReady] = useState(false);
   const [lastError, setLastError] = useState(null);
+
+  const currentBotRef = useRef(null);
+
+  // Synchronized setter
+  const setCurrentBot = useCallback((bot) => {
+    _setCurrentBot(bot);
+    currentBotRef.current = bot;
+    console.log('🔄 Bot state updated:', bot?.id);
+  }, []);
 
   // Initialize Stockfish engine with detailed logging
   useEffect(() => {
@@ -151,8 +161,9 @@ export function useHybridBot() {
   // 🔧 CRITICAL FIX: Updated bot creation to properly set state
 const createBotFromPlayer = useCallback(async (username, retryCount = 0) => {
   const botId = `bot-${username}-${Date.now()}`;
+  setIsLoading(true);
   
-  // Initialize with fallback data FIRST
+  // Initialize with fallback data
   let botProfile = {
     id: botId,
     username: username.toLowerCase(),
@@ -165,50 +176,61 @@ const createBotFromPlayer = useCallback(async (username, retryCount = 0) => {
   };
 
   try {
+    console.log(`🤖 Creating bot for: ${username}`);
     const response = await fetch(`/api/fetchgames?username=${encodeURIComponent(username)}`);
     const data = await response.json();
-    if (!data.player) {
-     console.warn('API returned no player data, using fallback');
-      return botProfile; // Return early with fallback
-} 
-
-    // Only override fields if API data exists
-    botProfile = {
-      ...botProfile, // Keep fallback as baseline
-      displayName: data.player?.displayName || `${username} Bot`,
-      rating: data.player?.rating || 1200,
-      personality: data.style || getDefaultStyle(),
-      engineSettings: personalityToEngineSettings(data.style || getDefaultStyle(), data.player?.rating),
-      gamesAnalyzed: data.stats?.totalGames || 0,
-      avatar: data.player?.avatar,
-      country: data.player?.country,
-      title: data.player?.title,
-      isFallback: false // Mark as real bot
-    };
-
-    setCurrentBot(botProfile);
-    setMoveTree(data.moveTree || getEnhancedDemoTree());
-    console.log('Final bot being returned:', {
-  id: botProfile.id,
-  name: botProfile.displayName,
-  rating: botProfile.rating,
-  isFallback: botProfile.isFallback
-});
-return botProfile;
-    return botProfile; // ✅ Always returns an object
+    
+    // Check if API returned valid data
+    if (data.player && Object.keys(data.player).length > 0) {
+      console.log('✅ API returned valid player data');
+      
+      // Update with real API data
+      botProfile = {
+        ...botProfile,
+        displayName: data.player.displayName || `${username}`,
+        rating: data.player.rating || 1200,
+        personality: data.style || getDefaultStyle(),
+        engineSettings: personalityToEngineSettings(data.style || getDefaultStyle(), data.player.rating),
+        gamesAnalyzed: data.stats?.totalGames || 0,
+        avatar: data.player.avatar,
+        country: data.player.country,
+        title: data.player.title,
+        isFallback: false // Mark as real bot
+      };
+      
+      // Set the move tree from API data
+      setMoveTree(data.moveTree || getEnhancedDemoTree());
+      console.log(`✅ Bot enhanced with ${data.stats?.totalGames || 0} games`);
+    } else {
+      console.warn('⚠️ API returned no player data, using fallback');
+      setMoveTree(getEnhancedDemoTree());
+    }
 
   } catch (error) {
-    console.error('Using fallback bot due to error:', error);
-    setCurrentBot(botProfile);
+    console.error('❌ API Error, using fallback bot:', error);
     setMoveTree(getEnhancedDemoTree());
-    return botProfile; // ✅ Still returns fallback
-  } finally {
-    setIsLoading(false);
   }
+
+  // ✅ CRITICAL: Always set the bot regardless of API success/failure
+  console.log(`🎯 Setting currentBot:`, {
+    name: botProfile.displayName,
+    rating: botProfile.rating,
+    isFallback: botProfile.isFallback
+  });
+  
+  setCurrentBot(botProfile);
+  setIsLoading(false);
+  
+  return botProfile;
 }, []);
 
   // Updated getBotMove to have better error handling and logging
-  const getBotMove = useCallback(async (gameInstance, gameHistory = []) => {
+  const getBotMove = useCallback(async (gameInstance = []) => {
+    const bot = currentBotRef.current; // Use ref instead of state
+    if (!bot) {
+      console.error('❌ No current bot available');
+      return null;
+    }
     const moveId = `move-${Date.now()}`;
     
     debug.log(`[${moveId}] getBotMove called - currentBot: ${currentBot?.displayName || 'None'}`);
@@ -227,6 +249,7 @@ return botProfile;
     setLastError(null);
 
     try {
+        console.log(`🤖 ${bot.displayName} thinking...`);
       debug.log(`[${moveId}] ${currentBot.displayName} is thinking...`);
 
       // Validate game instance
@@ -446,6 +469,7 @@ return botProfile;
   }, [currentBot]);
 
   return {
+    setCurrentBot,
     currentBot,
     moveTree,
     isLoading,
