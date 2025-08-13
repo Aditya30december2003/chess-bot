@@ -20,7 +20,7 @@ import {
 console.log('🔄 Chess component loaded');
 
 export default function ChessGame() {
-  const [boardWidth, setBoardWidth] = useState(400);
+  const [boardWidth, setBoardWidth] = useState(700);
   const [gameMode, setGameMode] = useState('selection'); // 'selection', 'bot', 'pvp'
   const [playerColor, setPlayerColor] = useState('white');
   const [isVsBot, setIsVsBot] = useState(false);
@@ -52,7 +52,8 @@ export default function ChessGame() {
     getBotMove,
     createBotFromPlayer,
     setCurrentBot,
-    lastError
+    lastError,
+    stockfishReady,
   } = useHybridBot();
 
   const { playMoveSound, SoundElements } = useSoundManager();
@@ -362,11 +363,11 @@ export default function ChessGame() {
     <div className="min-h-screen p-4 flex flex-col items-center" style={{
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
     }}>
-      <div className="w-full max-w-2xl">
+      <div className="w-full max-w-4xl flex flex-col items-center">
         
         {/* Game Mode Selection */}
         {gameMode === 'selection' && (
-          <div>
+          <div className="w-full">
             <div className="bg-yellow-500/20 backdrop-blur-md rounded-xl p-4 border border-yellow-500/30 text-center mb-4">
               <p className="text-yellow-200 text-sm">
                 🔍 DEBUG: BotSelector should call handleBotCreated when bot is created
@@ -384,9 +385,13 @@ export default function ChessGame() {
                 🧪 Test handleBotCreated
               </button>
             </div>
-            <BotSelector 
+            <BotSelector
               onBotCreated={handleBotCreated}
               onStartPvP={handleStartPvP}
+              stockfishReady={stockfishReady}
+              isLoading={isLoading}
+              currentBot={activeBot}
+              createBotFromPlayer={createBotFromPlayer}
             />
           </div>
         )}
@@ -415,7 +420,13 @@ export default function ChessGame() {
 
         {/* Chess Board */}
         {(gameMode === 'bot' || gameMode === 'pvp') && (
-          <div className="bg-white/10 backdrop-blur-md rounded-xl p-2 mb-2 border border-white/20 shadow-2xl">
+          <div className="relative bg-white/5 backdrop-blur-lg rounded-xl p-4 mb-4 border border-white/20 shadow-2xl overflow-hidden">
+            {/* Glass effect overlay */}
+            <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-white/5 mix-blend-overlay pointer-events-none"></div>
+            
+            {/* Ridged border effect */}
+            <div className="absolute inset-0 border-4 border-white/5 rounded-xl pointer-events-none"></div>
+            
             <Chessboard
               position={fen}
               onPieceDrop={onPieceDrop}
@@ -423,17 +434,20 @@ export default function ChessGame() {
               boardWidth={boardWidth}
               boardOrientation={boardOrientation}
               customDarkSquareStyle={{ 
-                background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
-                boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.2)'
+                background: 'linear-gradient(135deg, #4a5568 0%, #2d3748 100%)',
+                boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.3)',
+                border: '1px solid rgba(255,255,255,0.1)'
               }}
               customLightSquareStyle={{ 
-                background: 'linear-gradient(135deg, #c4b5fd 0%, #a78bfa 100%)',
-                boxShadow: 'inset 0 2px 4px rgba(255,255,255,0.2)'
+                background: 'linear-gradient(135deg, #e2e8f0 0%, #cbd5e0 100%)',
+                boxShadow: 'inset 0 2px 4px rgba(255,255,255,0.3)',
+                border: '1px solid rgba(0,0,0,0.1)'
               }}
               customBoardStyle={{
                 borderRadius: '0.5rem',
                 overflow: 'hidden',
-                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)'
+                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1)',
+                border: '1px solid rgba(255,255,255,0.2)'
               }}
               customSquareStyles={getCustomSquareStyles(selectedSquare, validMoves)}
               customPieces={customPieces}

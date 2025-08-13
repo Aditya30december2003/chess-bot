@@ -3,8 +3,6 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 export default function Home() {
-  const [name, setName] = useState('');
-  const [chessUsername, setChessUsername] = useState('');
   const router = useRouter();
 
   const handleStart = () => {
@@ -15,7 +13,7 @@ export default function Home() {
     
     // Pass both names as query params
     router.push(
-      `/chess?name=${encodeURIComponent(name.trim())}&opponent=${encodeURIComponent(chessUsername.trim())}`
+      `/chess`
     );
   };
 
@@ -24,24 +22,6 @@ export default function Home() {
       <div className="bg-gray-200 p-8 rounded-xl shadow-lg w-full max-w-md text-center">
         <h1 className="text-3xl font-bold mb-6">Chess Bot Challenge</h1>
         
-        {/* Your Name (Optional) */}
-        <input
-          type="text"
-          placeholder="Your name (optional)"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="w-full p-2 rounded-md text-lg mb-4 border border-gray-300"
-        />
-        
-        {/* Chess.com Username (Required) */}
-        <input
-          type="text"
-          placeholder="Chess.com username to play against *"
-          value={chessUsername}
-          onChange={(e) => setChessUsername(e.target.value)}
-          className="w-full p-2 rounded-md text-lg mb-4 border border-gray-300"
-          required
-        />
         
         <button
           onClick={handleStart}

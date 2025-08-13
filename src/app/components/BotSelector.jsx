@@ -1,98 +1,49 @@
 // components/BotSelector.jsx - Component for selecting/creating chess bots
+"use client"
 import React, { useState } from 'react';
-import { useHybridBot } from '../hooks/useHybridBot'; 
 
-export function BotSelector({ onBotCreated, onStartPvP }) { 
+export function BotSelector({
+  onBotCreated,
+  onStartPvP,
+  stockfishReady,
+  isLoading,
+  currentBot,
+  createBotFromPlayer,
+}) {
   const [username, setUsername] = useState('');
   const [selectedColor, setSelectedColor] = useState('white');
-  const { createBotFromPlayer, isLoading, stockfishReady, currentBot } = useHybridBot();
 
-const handleCreateBot = async () => {
-  if (!username.trim()) return;
-  
-  console.log('🎯 Starting bot creation for', username);
-  
-  try {
-    const bot = await createBotFromPlayer(username.toLowerCase());
-    console.log('🎯 createBotFromPlayer returned:', bot);
-    
-    if (bot) {
-      console.log('🚀 Calling onBotCreated with:', bot.displayName);
-      onBotCreated(bot, selectedColor);
-    } else {
-      console.error('❌ No bot available after creation');
-      alert('Bot creation failed. Please try again.');
+  const handleCreateBot = async () => {
+    if (!username.trim()) return;
+    try {
+      const bot = await createBotFromPlayer(username.toLowerCase());
+      if (bot) onBotCreated(bot, selectedColor);
+      else alert('Bot creation failed. Please try again.');
+    } catch (error) {
+      console.error('❌ Error creating bot:', error);
+      alert(`Failed to create bot: ${error.message}`);
     }
-  } catch (error) {
-    console.error('❌ Error creating bot:', error);
-    alert(`Failed to create bot: ${error.message}`);
-  }
-};
+  };
 
-const handlePresetBot = async (presetUsername) => {
-  setUsername(presetUsername);
-  console.log('🎯 Starting preset bot for', presetUsername);
-  
-  try {
-    const bot = await createBotFromPlayer(presetUsername);
-    console.log('🎯 createBotFromPlayer returned:', bot);
-    
-    if (bot) {
-      console.log('🚀 Calling onBotCreated with:', bot.displayName);
-      onBotCreated(bot, selectedColor);
-    } else {
-      console.error('❌ No bot available after creation');
-      alert('Preset bot creation failed.');
+  const handlePresetBot = async (presetUsername) => {
+    setUsername(presetUsername);
+    try {
+      const bot = await createBotFromPlayer(presetUsername);
+      if (bot) onBotCreated(bot, selectedColor);
+      else alert('Preset bot creation failed.');
+    } catch (error) {
+      console.error('❌ Error creating preset bot:', error);
+      alert(`Failed to create ${presetUsername} bot.`);
     }
-  } catch (error) {
-    console.error('❌ Error creating preset bot:', error);
-    alert(`Failed to create ${presetUsername} bot.`);
-  }
-};
+  };
 
   const popularBots = [
-    { 
-      username: 'hikaru', 
-      name: 'Hikaru Nakamura', 
-      style: 'Speed Demon',
-      description: 'Lightning-fast tactical play',
-      emoji: '⚡'
-    },
-    { 
-      username: 'magnuscarlsen', 
-      name: 'Magnus Carlsen', 
-      style: 'Universal Master',
-      description: 'Positional perfection',
-      emoji: '👑'
-    },
-    { 
-      username: 'gothamchess', 
-      name: 'Levy Rozman', 
-      style: 'The Entertainer',
-      description: 'Instructive and fun',
-      emoji: '🎭'
-    },
-    { 
-      username: 'anishgiri', 
-      name: 'Anish Giri', 
-      style: 'Solid Rock',
-      description: 'Unbreakable defense',
-      emoji: '🛡️'
-    },
-    { 
-      username: 'chessbrah', 
-      name: 'Chessbrah', 
-      style: 'Bro Style',
-      description: 'Chill but deadly',
-      emoji: '😎'
-    },
-    { 
-      username: 'penguingm1', 
-      name: 'Andrew Tang', 
-      style: 'Bullet Master',
-      description: 'Ultra-fast precision',
-      emoji: '🐧'
-    }
+    { username: 'hikaru', name: 'Hikaru Nakamura', style: 'Speed Demon', description: 'Lightning-fast tactical play', emoji: '⚡' },
+    { username: 'magnuscarlsen', name: 'Magnus Carlsen', style: 'Universal Master', description: 'Positional perfection', emoji: '👑' },
+    { username: 'gothamchess', name: 'Levy Rozman', style: 'The Entertainer', description: 'Instructive and fun', emoji: '🎭' },
+    { username: 'anishgiri', name: 'Anish Giri', style: 'Solid Rock', description: 'Unbreakable defense', emoji: '🛡️' },
+    { username: 'chessbrah', name: 'Chessbrah', style: 'Bro Style', description: 'Chill but deadly', emoji: '😎' },
+    { username: 'penguingm1', name: 'Andrew Tang', style: 'Bullet Master', description: 'Ultra-fast precision', emoji: '🐧' },
   ];
 
   return (
@@ -103,7 +54,7 @@ const handlePresetBot = async (presetUsername) => {
 
       {/* Engine Status */}
       <div className="flex items-center justify-center mb-4 text-sm">
-        <div className={`w-2 h-2 rounded-full mr-2 ${stockfishReady ? 'bg-green-400' : 'bg-yellow-400'}`}></div>
+        <div className={`w-2 h-2 rounded-full mr-2 ${stockfishReady ? 'bg-green-400' : 'bg-yellow-400'}`} />
         <span className="text-white/80">
           Engine: {stockfishReady ? 'Ready' : 'Loading...'}
         </span>
@@ -128,8 +79,8 @@ const handlePresetBot = async (presetUsername) => {
           <button
             onClick={() => setSelectedColor('white')}
             className={`px-4 py-2 rounded-lg border-2 transition-all ${
-              selectedColor === 'white' 
-                ? 'border-white bg-white/20 text-white' 
+              selectedColor === 'white'
+                ? 'border-white bg-white/20 text-white'
                 : 'border-white/30 text-white/70 hover:border-white/50'
             }`}
           >
@@ -138,8 +89,8 @@ const handlePresetBot = async (presetUsername) => {
           <button
             onClick={() => setSelectedColor('black')}
             className={`px-4 py-2 rounded-lg border-2 transition-all ${
-              selectedColor === 'black' 
-                ? 'border-white bg-white/20 text-white' 
+              selectedColor === 'black'
+                ? 'border-white bg-white/20 text-white'
                 : 'border-white/30 text-white/70 hover:border-white/50'
             }`}
           >
@@ -159,7 +110,7 @@ const handlePresetBot = async (presetUsername) => {
             placeholder="Enter Chess.com username"
             className="flex-1 px-3 py-2 bg-white/20 border border-white/30 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-white/70"
             disabled={isLoading}
-            onKeyPress={(e) => e.key === 'Enter' && handleCreateBot()}
+            onKeyDown={(e) => e.key === 'Enter' && handleCreateBot()}
           />
           <button
             onClick={handleCreateBot}
@@ -178,7 +129,7 @@ const handlePresetBot = async (presetUsername) => {
       <div className="mb-6">
         <h3 className="text-white font-medium mb-3">Popular Bots:</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {popularBots.map(bot => (
+          {popularBots.map((bot) => (
             <button
               key={bot.username}
               onClick={() => handlePresetBot(bot.username)}
@@ -188,15 +139,9 @@ const handlePresetBot = async (presetUsername) => {
               <div className="flex items-start gap-3">
                 <span className="text-2xl">{bot.emoji}</span>
                 <div className="flex-1 min-w-0">
-                  <div className="text-white font-medium group-hover:text-blue-200">
-                    {bot.name}
-                  </div>
-                  <div className="text-blue-200 text-sm font-medium">
-                    {bot.style}
-                  </div>
-                  <div className="text-white/60 text-sm">
-                    {bot.description}
-                  </div>
+                  <div className="text-white font-medium group-hover:text-blue-200">{bot.name}</div>
+                  <div className="text-blue-200 text-sm font-medium">{bot.style}</div>
+                  <div className="text-white/60 text-sm">{bot.description}</div>
                 </div>
               </div>
             </button>
@@ -214,7 +159,6 @@ const handlePresetBot = async (presetUsername) => {
         </button>
       </div>
 
-      {/* Loading State */}
       {isLoading && (
         <div className="mt-4 text-center">
           <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
@@ -225,7 +169,8 @@ const handlePresetBot = async (presetUsername) => {
   );
 }
 
-// Bot Profile Display Component
+// Bot Profile stays the same
+
 export function BotProfile({ bot, onStartGame, onChangeBot }) {
   if (!bot) return null;
 
