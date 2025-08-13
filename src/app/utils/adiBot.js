@@ -261,7 +261,7 @@ function getIntelligentFallback(game) {
     try {
       const moves = game.moves();
       return moves[0];
-    } catch (e) {
+    } catch {
       return null;
     }
   }

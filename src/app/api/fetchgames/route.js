@@ -24,7 +24,7 @@ function buildMoveTree(history, tree) {
   }
 }
 
-function analyzePlayerStyle(games, username) {
+function analyzePlayerStyle(games) {
   // Keep a lightweight style; your previous one works—trimmed for brevity
   if (!Array.isArray(games) || games.length === 0) {
     return {
