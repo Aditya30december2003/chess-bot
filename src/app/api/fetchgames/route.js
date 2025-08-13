@@ -1,212 +1,176 @@
-// app/api/fetchgames/route.js - FIXED VERSION
+// app/api/fetchgames/route.js
 import { NextResponse } from 'next/server';
 import { Chess } from 'chess.js';
 
-// Build move tree from game history - FIXED to prevent infinite recursion
-const buildMoveTree = (moves, tree) => {
-  let node = tree;
-  
-  // Safety check to prevent infinite loops
-  if (!Array.isArray(moves) || moves.length === 0) {
-    return;
-  }
-  
-  // Limit depth to prevent stack overflow (most games are <100 moves)
-  const maxDepth = Math.min(moves.length, 80);
-  
-  for (let i = 0; i < maxDepth; i++) {
-    const move = moves[i];
-    if (typeof move !== 'string' || move.length === 0) {
-      break; // Invalid move, stop here
-    }
-    
-    if (!node[move]) {
-      node[move] = { __games: 0 };
-    }
-    
-    // Safety check to prevent circular references
-    if (node[move] === node) {
-      console.error('Circular reference detected, breaking');
-      break;
-    }
-    
-    node[move].__games += 1;
-    node = node[move];
-  }
-};
+// Constants
+const MAX_MONTHS = 6;
+const MAX_GAMES_PER_ARCHIVE = 100;
+const MAX_PROCESSING_TIME = 30000;
+const MAX_MOVE_TREE_DEPTH = 100;
 
-// Clean PGN data - IMPROVED version
-const cleanPgn = (pgn) => {
-  if (!pgn || typeof pgn !== 'string') return null;
-  
-  try {
-    // Remove problematic characters and normalize
-    let cleanedPgn = pgn
-      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Remove control characters
-      .replace(/\r\n/g, '\n') // Normalize line endings
-      .replace(/\r/g, '\n')
-      .trim();
-    
-    // Basic validation - must contain moves
-    if (!cleanedPgn.includes('1.') && !cleanedPgn.includes('1 ')) {
-      return null;
-    }
-    
-    return cleanedPgn;
-  } catch (e) {
-    console.error('Error cleaning PGN:', e.message);
-    return null;
-  }
-};
-
-// Analyze player style - SAFE version
+// Fixed style analysis function
 const analyzePlayerStyle = (games, username) => {
   if (!Array.isArray(games) || games.length === 0) {
     return getDefaultStyle();
   }
-  
-  let totalGames = 0;
-  let wins = 0;
-  let tacticalMoves = 0;
-  let aggressiveMoves = 0;
-  let fastGames = 0;
-  let totalMoves = 0;
-  
-  const openings = {};
-  const timeControls = {};
-  
-  // Limit processing to prevent timeout
+
+  const stats = {
+    totalGames: 0,
+    wins: 0,
+    draws: 0,
+    losses: 0,
+    tacticalMoves: 0,
+    aggressiveMoves: 0,
+    fastGames: 0,
+    totalMoves: 0,
+    openings: {},
+    timeControls: {},
+    pieceActivity: {
+      knight: 0,
+      bishop: 0,
+      rook: 0,
+      queen: 0
+    }
+  };
+
+  // Process games
   const gamesToProcess = Math.min(games.length, 200);
   
   for (let i = 0; i < gamesToProcess; i++) {
     const game = games[i];
     if (!game || !game.pgn) continue;
-    
-    totalGames++;
-    
+
+    stats.totalGames++;
+
     try {
-      // Determine if this player won
+      // Game result analysis
       const playerIsWhite = game.white?.username?.toLowerCase() === username.toLowerCase();
       const result = game.white?.result || 'unknown';
       
-      if ((playerIsWhite && result === 'win') || 
-          (!playerIsWhite && result !== 'win' && result !== 'draw')) {
-        wins++;
+      if (result === 'win') {
+        stats.wins += playerIsWhite ? 1 : 0;
+        stats.losses += playerIsWhite ? 0 : 1;
+      } else if (result === 'checkmated' || result === 'resigned') {
+        stats.losses += playerIsWhite ? 1 : 0;
+        stats.wins += playerIsWhite ? 0 : 1;
+      } else if (result === 'draw') {
+        stats.draws++;
       }
-      
-      // Analyze time control
+
+      // Time control analysis
       if (game.time_control) {
         const timeControl = String(game.time_control);
-        timeControls[timeControl] = (timeControls[timeControl] || 0) + 1;
+        stats.timeControls[timeControl] = (stats.timeControls[timeControl] || 0) + 1;
         
-        const timeInSeconds = parseInt(timeControl) || 0;
-        if (timeInSeconds < 600) {
-          fastGames++;
-        }
+        if ((parseInt(timeControl) || 0) < 600) stats.fastGames++;
       }
-      
-      // PGN analysis with safety checks
+
+      // PGN analysis
       const cleanedPgn = cleanPgn(game.pgn);
       if (!cleanedPgn) continue;
-      
+
       const chess = new Chess();
+      chess.loadPgn(cleanedPgn);
+      const history = chess.history();
       
-      try {
-        chess.loadPgn(cleanedPgn);
-        const history = chess.history();
+      if (history.length > 0) {
+        stats.totalMoves += history.length;
         
-        if (history.length > 0) {
-          totalMoves += history.length;
-          
-          // Track opening moves (first 4 moves only)
-          if (history.length >= 4) {
-            const opening = history.slice(0, 4).join(' ');
-            if (opening.length < 50) { // Prevent huge strings
-              openings[opening] = (openings[opening] || 0) + 1;
-            }
+        // Opening tracking
+        if (history.length >= 4) {
+          const opening = history.slice(0, 4).join(' ');
+          if (opening.length < 50) {
+            stats.openings[opening] = (stats.openings[opening] || 0) + 1;
           }
         }
-      } catch (pgnError) {
-        // Skip this game if PGN is invalid
-        continue;
+
+        // Piece activity
+        history.forEach(move => {
+          if (move.startsWith('N')) stats.pieceActivity.knight++;
+          else if (move.startsWith('B')) stats.pieceActivity.bishop++;
+          else if (move.startsWith('R')) stats.pieceActivity.rook++;
+          else if (move.startsWith('Q')) stats.pieceActivity.queen++;
+        });
+
+        // Tactical/aggressive moves
+        const pgnLower = game.pgn.toLowerCase();
+        stats.tacticalMoves += Math.min((pgnLower.match(/x/g) || []).length, 20);
+        stats.aggressiveMoves += Math.min((pgnLower.match(/[!?]/g) || []).length, 10);
       }
-      
-      // Simple heuristics for playing style
-      const pgnLower = game.pgn.toLowerCase();
-      const captureCount = (game.pgn.match(/x/g) || []).length;
-      tacticalMoves += Math.min(captureCount, 20); // Cap to prevent overflow
-      
-      const excitingMoveCount = (game.pgn.match(/[!?]/g) || []).length;
-      aggressiveMoves += Math.min(excitingMoveCount, 10); // Cap to prevent overflow
-      
-    } catch (gameError) {
-      console.warn(`Error processing game ${i}:`, gameError.message.substring(0, 50));
-      continue;
+    } catch (e) {
+      console.warn(`Game ${i} analysis error:`, e.message.substring(0, 50));
     }
   }
-  
-  if (totalGames === 0) {
-    return getDefaultStyle();
-  }
-  
-  const averageGameLength = totalMoves / totalGames;
-  
+
+  if (stats.totalGames === 0) return getDefaultStyle();
+
   return {
-    aggression: Math.min((aggressiveMoves / totalGames) + (fastGames / totalGames * 0.3), 1),
-    tactics: Math.min(tacticalMoves / totalGames / 10, 1),
-    winRate: wins / totalGames,
-    speed: fastGames / totalGames,
-    averageGameLength: Math.min(averageGameLength, 200), // Cap game length
-    preferredOpenings: openings,
-    timeControls,
-    gamesAnalyzed: totalGames
+    aggression: Math.min(0.3 * (stats.aggressiveMoves / stats.totalGames) + 
+                0.7 * (stats.fastGames / stats.totalGames), 1),
+    tactics: Math.min(stats.tacticalMoves / stats.totalGames / 5, 1),
+    winRate: stats.wins / stats.totalGames,
+    drawRate: stats.draws / stats.totalGames,
+    speed: stats.fastGames / stats.totalGames,
+    averageGameLength: stats.totalMoves / stats.totalGames,
+    pieceActivity: {
+      knight: stats.pieceActivity.knight / stats.totalMoves,
+      bishop: stats.pieceActivity.bishop / stats.totalMoves,
+      rook: stats.pieceActivity.rook / stats.totalMoves,
+      queen: stats.pieceActivity.queen / stats.totalMoves
+    },
+    preferredOpenings: stats.openings,
+    timeControls: stats.timeControls,
+    gamesAnalyzed: stats.totalGames
   };
 };
-
 function getDefaultStyle() {
   return {
     aggression: 0.5,
     tactics: 0.5,
     winRate: 0.5,
+    drawRate: 0.2,
     speed: 0.5,
     averageGameLength: 40,
+    pieceActivity: {
+      knight: 0.15,
+      bishop: 0.15,
+      rook: 0.1,
+      queen: 0.05
+    },
     preferredOpenings: {},
     timeControls: {},
     gamesAnalyzed: 0
   };
 }
 
-// Main API handler - SAFE version
+// Main API handler
 export async function GET(request) {
   const startTime = Date.now();
-  
+
   try {
     const { searchParams } = new URL(request.url);
     const username = searchParams.get('username') || 'demo';
-    const monthsBack = Math.min(parseInt(searchParams.get('months')) || 3, 6); // Limit to 6 months max
-    
-    console.log(`🚀 Fetching data for: ${username} (${monthsBack} months)`);
-    
-    // Step 1: Get player information with timeout
+    const monthsBack = Math.min(parseInt(searchParams.get('months')) || 3, MAX_MONTHS);
+
+    console.log(`🚀 Fetching data for ${username} (last ${monthsBack} months)`);
+
+    // 1. Fetch player profile
     let playerData = {};
     try {
       const controller = new AbortController();
-      setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      setTimeout(() => controller.abort(), 5000);
       
       const response = await fetch(`https://api.chess.com/pub/player/${username}`, {
         signal: controller.signal,
         headers: { 'User-Agent': 'Chess-Bot/1.0' }
       });
       
-      if (response.ok) {
-        playerData = await response.json();
-      }
-    } catch (error) {
-      console.warn('Failed to fetch player data:', error.message);
-      // Continue with empty player data
+      if (response.ok) playerData = await response.json();
+    } catch (e) {
+      console.warn('Player data fetch failed:', e.message);
     }
-    
-    // Step 2: Generate archive URLs
+
+    // 2. Prepare archive URLs
     const now = new Date();
     const archives = [];
     for (let i = 0; i < monthsBack; i++) {
@@ -215,58 +179,48 @@ export async function GET(request) {
       const month = String(date.getMonth() + 1).padStart(2, '0');
       archives.push(`https://api.chess.com/pub/player/${username}/games/${year}/${month}`);
     }
-    
-    // Step 3: Fetch games with safety limits
+
+    // 3. Process game archives
     const moveTree = {};
     let allGames = [];
-    let totalGames = 0;
+    let totalGamesProcessed = 0;
     let errorCount = 0;
-    const maxGamesPerArchive = 50; // Limit games per month
-    
-    console.log(`📦 Fetching from ${archives.length} archives...`);
-    
-    for (let archiveIndex = 0; archiveIndex < archives.length; archiveIndex++) {
-      const archiveUrl = archives[archiveIndex];
-      
-      // Check if we're running out of time (max 25 seconds)
-      if (Date.now() - startTime > 25000) {
-        console.log('⏰ Timeout approaching, stopping fetch');
+
+    for (const archiveUrl of archives) {
+      // Check timeout
+      if (Date.now() - startTime > MAX_PROCESSING_TIME - 5000) {
+        console.log('⏰ Approaching timeout, stopping archive processing');
         break;
       }
-      
+
       try {
-        console.log(`📥 Fetching: ${archiveUrl}`);
-        
         const controller = new AbortController();
-        setTimeout(() => controller.abort(), 15000); // 15 second timeout per request
+        setTimeout(() => controller.abort(), 10000);
         
         const res = await fetch(archiveUrl, {
           signal: controller.signal,
           headers: { 'User-Agent': 'Chess-Bot/1.0' }
         });
-        
+
         if (!res.ok) {
-          console.warn(`❌ Failed to fetch ${archiveUrl}: ${res.status}`);
+          console.warn(`Archive ${archiveUrl} failed: ${res.status}`);
           continue;
         }
-        
-        const data = await res.json();
-        const games = Array.isArray(data.games) ? data.games.slice(0, maxGamesPerArchive) : [];
-        
-        allGames = allGames.concat(games);
-        console.log(`✅ Found ${games.length} games in archive ${archiveIndex + 1}`);
 
-        // Process games for move tree with safety checks
-        for (let gameIndex = 0; gameIndex < games.length; gameIndex++) {
-          const game = games[gameIndex];
-          
-          // Check timeout again
-          if (Date.now() - startTime > 27000) {
-            console.log('⏰ Timeout during processing, stopping');
-            break;
-          }
-          
-          if (!game || !game.pgn) {
+        const data = await res.json();
+        const games = Array.isArray(data.games) 
+          ? data.games.slice(0, MAX_GAMES_PER_ARCHIVE)
+          : [];
+
+        allGames = allGames.concat(games);
+        console.log(`📊 ${archiveUrl}: ${games.length} games`);
+
+        // Process games in batches
+        for (let i = 0; i < games.length; i++) {
+          if (Date.now() - startTime > MAX_PROCESSING_TIME - 2000) break;
+
+          const game = games[i];
+          if (!game?.pgn) {
             errorCount++;
             continue;
           }
@@ -282,46 +236,35 @@ export async function GET(request) {
             chess.loadPgn(cleanedPgn);
             const history = chess.history();
             
-            if (history.length > 0 && history.length < 200) { // Reasonable game length
+            if (history.length > 0 && history.length < 200) {
               buildMoveTree(history, moveTree);
-              totalGames++;
+              totalGamesProcessed++;
             }
-            
-            // Process in batches to prevent blocking
-            if (gameIndex % 10 === 0) {
-              await new Promise(resolve => setTimeout(resolve, 0)); // Yield to event loop
-            }
-            
+
+            // Yield to event loop periodically
+            if (i % 10 === 0) await new Promise(resolve => setTimeout(resolve, 0));
           } catch (e) {
             errorCount++;
             if (errorCount % 20 === 0) {
-              console.log(`⚠️ PGN errors: ${errorCount}`);
+              console.warn(`Encountered ${errorCount} errors`);
             }
           }
         }
-        
-        // Small delay between archives to be nice to Chess.com
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-      } catch (err) {
-        console.error(`❌ Archive fetch failed: ${archiveUrl}`, err.message);
-        continue;
+
+        await new Promise(resolve => setTimeout(resolve, 300)); // Rate limiting
+      } catch (e) {
+        console.warn(`Archive ${archiveUrl} failed:`, e.message);
       }
     }
-    
-    // Step 4: Analyze playing style
+
+    // 4. Analyze style and prepare response
     const playerStyle = analyzePlayerStyle(allGames, username);
-    
-    // Step 5: Get rating
     const rating = playerData.stats?.chess_rapid?.last?.rating || 
                   playerData.stats?.chess_blitz?.last?.rating || 
                   playerData.stats?.chess_bullet?.last?.rating || 1200;
-    
-    console.log(`✅ Processed ${totalGames} games for ${username} in ${Date.now() - startTime}ms`);
-    
-    // Step 6: Prepare safe response
+
     const response = {
-      moveTree: moveTree,
+      moveTree,
       player: {
         username: username.toLowerCase(),
         displayName: playerData.name || username,
@@ -332,33 +275,27 @@ export async function GET(request) {
       },
       style: playerStyle,
       stats: {
-        totalGames,
+        totalGames: totalGamesProcessed,
         errorCount,
         monthsAnalyzed: monthsBack,
-        processingTime: Date.now() - startTime,
-        timestamp: new Date().toISOString()
-      },
-      topOpenings: getTopOpenings(playerStyle.preferredOpenings)
+        processingTime: Date.now() - startTime
+      }
     };
-    
-    // If very few games, enhance with demo data
-    if (totalGames < 5) {
-      console.log('⚠️ Few games processed, enhancing with demo data');
-      response.moveTree = {
-        ...getEnhancedDemoTree(),
-        ...response.moveTree
-      };
+
+    // Enhance with demo data if insufficient games
+    if (totalGamesProcessed < 10) {
+      console.log('⚠️ Enhancing with demo data');
+      response.moveTree = mergeTrees(getStandardOpenings(), response.moveTree);
       response.stats.demoDataAdded = true;
     }
-    
+
     return NextResponse.json(response);
-    
+
   } catch (error) {
-    console.error('❌ API Error:', error.name, error.message);
-    
-    // Return safe fallback data
+    console.error('API Error:', error);
     return NextResponse.json({
-      moveTree: getEnhancedDemoTree(),
+      error: error.message,
+      moveTree: getStandardOpenings(),
       player: {
         username: 'demo',
         displayName: 'Demo Player',
@@ -367,71 +304,68 @@ export async function GET(request) {
       style: getDefaultStyle(),
       stats: {
         totalGames: 0,
-        errorCount: 0,
-        error: `${error.name}: ${error.message.substring(0, 100)}`,
-        timestamp: new Date().toISOString()
-      },
-      topOpenings: {}
+        errorCount: 1,
+        error: error.message.substring(0, 100)
+      }
     }, { status: 200 });
   }
 }
 
-// Helper function to get top openings safely
-function getTopOpenings(openings) {
-  if (!openings || typeof openings !== 'object') {
-    return {};
-  }
-  
-  try {
-    return Object.entries(openings)
-      .sort(([,a], [,b]) => b - a)
-      .slice(0, 10)
-      .reduce((obj, [key, value]) => {
-        if (typeof key === 'string' && key.length < 100) { // Prevent huge keys
-          obj[key] = value;
+// Helper functions
+function mergeTrees(tree1, tree2) {
+  const result = { ...tree1 };
+  for (const [move, data] of Object.entries(tree2)) {
+    if (result[move]) {
+      result[move].__games += data.__games || 0;
+      if (data.__fen) result[move].__fen = data.__fen;
+      for (const [childMove, childData] of Object.entries(data)) {
+        if (childMove !== '__games' && childMove !== '__fen') {
+          result[move][childMove] = mergeTrees(
+            result[move][childMove] || {}, 
+            childData
+          );
         }
-        return obj;
-      }, {});
-  } catch (e) {
-    return {};
+      }
+    } else {
+      result[move] = { ...data };
+    }
   }
+  return result;
 }
 
-// Safe demo tree
-function getEnhancedDemoTree() {
+function getStandardOpenings() {
   return {
-    "e4": { 
-      "__games": 150, 
+    "e4": {
+      "__games": 500,
       "e5": { 
-        "__games": 85, 
-        "Nf3": { 
-          "__games": 60,
+        "__games": 300,
+        "Nf3": {
+          "__games": 200,
           "Nc6": {
-            "__games": 35,
-            "Bb5": { "__games": 20, "a6": { "__games": 15, "Ba4": { "__games": 12 } } },
-            "Bc4": { "__games": 10, "f5": { "__games": 6 } }
-          },
-          "Nf6": { "__games": 15, "Nxe4": { "__games": 8 } }
-        },
-        "f4": { "__games": 15, "exf4": { "__games": 10 } }
+            "__games": 150,
+            "Bb5": { "__games": 100, "a6": { "__games": 80 } },
+            "Bc4": { "__games": 50, "Nf6": { "__games": 30 } }
+          }
+        }
       },
-      "c5": { 
-        "__games": 40,
-        "Nf3": { "__games": 25, "d6": { "__games": 15, "d4": { "__games": 10 } } }
+      "c5": {
+        "__games": 150,
+        "Nf3": {
+          "__games": 100,
+          "d6": { "__games": 70, "Nc6": { "__games": 30 } }
+        }
       }
     },
-    "d4": { 
-      "__games": 120, 
-      "d5": { 
-        "__games": 70,
-        "c4": { "__games": 45, "e6": { "__games": 25 } }
-      },
-      "Nf6": { "__games": 35, "c4": { "__games": 20 } }
-    },
-    "Nf3": { 
-      "__games": 60,
-      "d5": { "__games": 25, "d4": { "__games": 15 } },
-      "Nf6": { "__games": 20, "c4": { "__games": 12 } }
+    "d4": {
+      "__games": 400,
+      "d5": {
+        "__games": 250,
+        "c4": {
+          "__games": 200,
+          "e6": { "__games": 120 },
+          "dxc4": { "__games": 80 }
+        }
+      }
     }
   };
 }

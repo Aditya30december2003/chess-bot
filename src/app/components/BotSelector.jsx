@@ -1,8 +1,8 @@
 // components/BotSelector.jsx - Component for selecting/creating chess bots
 import React, { useState } from 'react';
-import { useHybridBot } from '../hooks/useHybridBot';
+import { useHybridBot } from '../hooks/useHybridBot'; 
 
-export function BotSelector({ onBotCreated, onStartPvP }) {
+export function BotSelector({ onBotCreated, onStartPvP }) { 
   const [username, setUsername] = useState('');
   const [selectedColor, setSelectedColor] = useState('white');
   const { createBotFromPlayer, isLoading, stockfishReady, currentBot } = useHybridBot();

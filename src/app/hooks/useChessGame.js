@@ -8,7 +8,7 @@ export function useChessGame() {
   const [selectedSquare, setSelectedSquare] = useState(null);
   const [validMoves, setValidMoves] = useState([]);
   const [gameOver, setGameOver] = useState(false);
-  const [winner, setWinner] = useState(null);
+  const [winner, setWinner] = useState(null); 
 
   // Check for game over conditions
   useEffect(() => {
